@@ -69,8 +69,8 @@ static int cc1020_setupRX(int);
 static void cc1020_setupPD(void);
 static void cc1020_wakeupTX(int);
 static void cc1020_wakeupRX(int);
-static uint8_t cc1020_read_reg(uint8_t addr);
-static void cc1020_write_reg(uint8_t addr, uint8_t adata);
+uint8_t cc1020_read_reg(uint8_t addr);
+void cc1020_write_reg(uint8_t addr, uint8_t adata);
 static void cc1020_load_config(const uint8_t *);
 static void cc1020_reset(void);
 
@@ -545,7 +545,7 @@ ISR(UART0RX, cc1020_rxhandler)
   } 
 }
 
-static void
+void
 cc1020_write_reg(uint8_t addr, uint8_t adata)
 {
   unsigned int i;
@@ -592,7 +592,7 @@ cc1020_write_reg(uint8_t addr, uint8_t adata)
   PSEL_OFF;
 }
 
-static uint8_t
+uint8_t
 cc1020_read_reg(uint8_t addr)
 {
   unsigned int i;

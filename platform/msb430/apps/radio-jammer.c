@@ -43,8 +43,7 @@
 #include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "dev/spi.h"
-#include "dev/cc2420.h"
-#include "dev/cc2420_const.h"
+#include "dev/cc1020.h"
 #include "node-id.h"
 #include "lib/random.h"
 #include "dev/radio.h"
@@ -62,6 +61,9 @@
 
 #define CHANNEL 16
 #define DEFAULT_TXPOWER_LEVEL 27
+
+uint8_t cc1020_read_reg(uint8_t addr);
+void cc1020_write_reg(uint8_t addr, uint8_t adata);
 
 int jam_ena;
 
@@ -83,20 +85,6 @@ static uint16_t seqno;
 PROCESS(test_process, "Sky jammer");
 AUTOSTART_PROCESSES(&test_process);
 
-/*---------------------------------------------------------------------------*/
-static unsigned
-getreg(enum cc2420_register regname)
-{
-  unsigned reg;
-  FASTSPI_GETREG(regname, reg);
-  return reg;
-}
-/*---------------------------------------------------------------------------*/
-static void
-setreg(enum cc2420_register regname, unsigned value)
-{
-  FASTSPI_SETREG(regname, value);
-}
 /*---------------------------------------------------------------------------*/
 static void
 strobe(enum cc2420_register regname)
@@ -269,7 +257,7 @@ PROCESS_THREAD(test_process, ev, data)
 
 	/* node_id_burn(1); */
 
-	d = &cc2420_driver;
+	d = &cc1020_driver;
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
