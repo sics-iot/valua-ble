@@ -82,7 +82,7 @@ static struct etimer et;
 
 static uint16_t seqno;
 
-PROCESS(test_process, "Sky jammer");
+PROCESS(test_process, "MSB430 jammer");
 AUTOSTART_PROCESSES(&test_process);
 
 /*---------------------------------------------------------------------------*/
