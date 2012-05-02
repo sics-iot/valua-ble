@@ -32,7 +32,7 @@
 
 /**
  * \file
- *         Channel jammer program for Tmote
+ *         Channel jammer program for MSB430
  * \author
  *         Zhitao He <zhitao@sics.se>
  */
