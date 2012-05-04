@@ -53,7 +53,7 @@
 #include "sys/energest.h"
 #include "isr_compat.h"
 
-#define DEBUG 0
+#define DEBUG  1
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -336,6 +336,8 @@ static int
 cc1020_read(void *buf, unsigned short size)
 {
   unsigned len;
+
+	PRINTF(".\n");
 
   if(cc1020_rxlen <= HDR_SIZE) {
     return 0;
