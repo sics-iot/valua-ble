@@ -450,7 +450,7 @@ PROCESS_THREAD(cc1020_receiver_process, ev, data)
     if(expected_crc == actual_crc) {
       len = cc1020_read(packetbuf_dataptr(), PACKETBUF_SIZE);
       packetbuf_set_datalen(len);
-      NETSTACK_RDC.input();
+      /* NETSTACK_RDC.input(); */ //zhitao: circumvent RDC API
     } else {
       RIMESTATS_ADD(badcrc);
       reset_receiver();

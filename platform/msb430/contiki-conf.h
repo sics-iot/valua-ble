@@ -7,12 +7,12 @@
 #define WITH_SD				0
 
 #define NETSTACK_CONF_RADIO		cc1020_driver
-#define NETSTACK_CONF_RDC		nullrdc_driver
+#define NETSTACK_CONF_RDC		rawrdc_driver
 #define NETSTACK_CONF_MAC		nullmac_driver
 #define NETSTACK_CONF_NETWORK		rime_driver
 #define NETSTACK_CONF_FRAMER		framer_nullmac
 
-#define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE	4
+#define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE	8
 
 #define ENERGEST_CONF_ON		1
 
