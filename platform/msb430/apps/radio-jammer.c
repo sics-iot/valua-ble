@@ -197,30 +197,30 @@ start_mode(enum modes to)
 }
 /*---------------------------------------------------------------------------*/
 // radio receiver callback
-static uint16_t rxbuf[64];
+/* static uint16_t rxbuf[64]; */
 /* static const uint8_t *rxbuf_ptr = (uint8_t *)rxbuf; */
 
-static void
-packet_received(const struct radio_driver * r)
-{
-	int len;
-	uint8_t *rxbuf_ptr;
-	/* int i; */
-	len = r->read(rxbuf, sizeof(rxbuf));
-	if(len > 0) {
-	/* if(len != 0 && len == 41) { */
-		printf("%d: 0x", len);
-		for(rxbuf_ptr = (uint8_t *)&rxbuf[0];rxbuf_ptr < (uint8_t *)rxbuf + len;rxbuf_ptr++) {
-			printf("%02x", *rxbuf_ptr);
-		}
-		printf("\n");
-	}
-}
+/* static void */
+/* packet_received(const struct radio_driver * r) */
+/* { */
+/* 	int len; */
+/* 	uint8_t *rxbuf_ptr; */
+/* 	/\* int i; *\/ */
+/* 	len = r->read(rxbuf, sizeof(rxbuf)); */
+/* 	if(len > 0) { */
+/* 	/\* if(len != 0 && len == 41) { *\/ */
+/* 		printf("%d: 0x", len); */
+/* 		for(rxbuf_ptr = (uint8_t *)&rxbuf[0];rxbuf_ptr < (uint8_t *)rxbuf + len;rxbuf_ptr++) { */
+/* 			printf("%02x", *rxbuf_ptr); */
+/* 		} */
+/* 		printf("\n"); */
+/* 	} */
+/* } */
 
 #define MAX_TX_PACKETS 999
 #define MAX_PHY_LEN 3
-void
-cc2420_set_receiver(void (*f)(const struct radio_driver *));
+/* void */
+/* cc2420_set_receiver(void (*f)(const struct radio_driver *)); */
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(test_process, ev, data)
 {
@@ -235,7 +235,7 @@ PROCESS_THREAD(test_process, ev, data)
 
 	d = &cc1020_driver;
 
-	button_sensor.configure(SENSORS_ACTIVE, 1);
+	/* button_sensor.configure(SENSORS_ACTIVE, 1); */
 
 	/* initialize GIO pins */
   /* GIO_PxDIR |= (GIO2_BV | GIO3_BV); */
@@ -253,22 +253,6 @@ PROCESS_THREAD(test_process, ev, data)
   start_mode(INITIAL_MODE);
 
   printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
-
-/* 	unsigned reg; */
-/* 	reg = getreg(CC2420_IOCFG0); */
-/* 	printf("IOCFG0 = 0x%04x\n", reg); */
-/* 	/\* set test output signal *\/ */
-/* 	reg = getreg(CC2420_IOCFG1); */
-/* #define CCAMUX_BV (31<<0) */
-/* #define SFDMUX_BV (31<<5) */
-/* 	/\* reg = (reg & (~CCAMUX_BV)) | (23<<0); *\/ */
-/* 	/\* setreg(CC2420_IOCFG1, reg); *\/ */
-/* 	printf("IOCFG1 = 0x%04x\n", reg); */
-/* 	reg = getreg(CC2420_MDMCTRL0); */
-/* 	printf("MDMCTRL0 = 0x%04x\n", reg); */
-/* 	reg = getreg(CC2420_MDMCTRL1); */
-/* 	printf("MDMCTRL1 = 0x%04x\n", reg); */
-
 
   while(1) {
     PROCESS_WAIT_EVENT();
@@ -311,58 +295,31 @@ PROCESS_THREAD(test_process, ev, data)
 			/* 	} */
       /* } */
     } else if(ev == serial_line_event_message) {
-      char ch = *(char *)data;
-      if(ch == '\0') {
-				ch = last_ch;
-			}
-			last_ch = ch;
-			if(ch >= '0' && ch <= '9') {
-					cc2420_set_txpower(tx_power_level[ch - '0']);
-					printf("tx power = %u\n", cc2420_get_txpower());
-      } else if(ch == 'r') {
-				int8_t val = cc2420_rssi();
-				printf("rssi = %d\n", val);
-      } else if(ch == 'n') {
-				start_mode((mode + 1) % NUM_MODES);
-      } else if(ch == 'p') {
-				start_mode((mode - 1) % NUM_MODES);
-      } else if(ch == 'e') {
-				watchdog_reboot();
-      /* } else if(ch == '+') { */
-			/* 	int chn = cc2420_get_channel(); */
-			/* 	chn = (chn - 11 + 1) % 16 + 11; */
-			/* 	cc2420_set_channel(chn); */
-			/* 	printf("channel = %d\n", chn); */
-      /* } else if(ch == '-') { */
-			/* 	int chn = cc2420_get_channel(); */
-			/* 	chn = (chn - 11 + 15) % 16 + 11; */
-			/* 	cc2420_set_channel(chn); */
-			/* 	printf("channel = %d\n", chn); */
-			/* } else if(ch == 'c') { */
-			/* 	reg = getreg(CC2420_IOCFG1); */
-			/* 	unsigned ccamux = (reg & CCAMUX_BV) >> 0; */
-			/* 	ccamux = ccamux==31 ? 0 : ccamux+1; */
-			/* 	reg = (reg & (~CCAMUX_BV)) | (ccamux<<0); */
-			/* 	setreg(CC2420_IOCFG1, reg); */
-			/* 	printf("IOCFG1 = 0x%04x\n", reg); */
-			/* } else if(ch == 's') { */
-			/* 	reg = getreg(CC2420_IOCFG1); */
-			/* 	unsigned sfdmux = (reg & SFDMUX_BV) >> 5; */
-			/* 	sfdmux = sfdmux==31 ? 0 : sfdmux+1; */
-			/* 	reg = (reg & (~SFDMUX_BV)) | (sfdmux<<5); */
-			/* 	setreg(CC2420_IOCFG1, reg); */
-			/* 	printf("SFDMUX = %02hu\n", sfdmux); */
-			/* } else if(ch =='w') { */
+				char ch = *(char *)data;
+				if(ch == '\0') {
+					ch = last_ch;
+				}
+				last_ch = ch;
+			/* if(ch >= '0' && ch <= '9') { */
+			/* 		cc2420_set_txpower(tx_power_level[ch - '0']); */
 			/* 		printf("tx power = %u\n", cc2420_get_txpower()); */
-			} else {
-				printf("invalid input\n");
-      }
-    } else if(ev == sensors_event && data == &button_sensor) {
-      start_mode((mode + 1) % NUM_MODES);
-    }
-  }
-
-  PROCESS_END();
+      /* } else if(ch == 'r') { */
+			/* 	int8_t val = cc2420_rssi(); */
+			/* 	printf("rssi = %d\n", val); */
+      /* } else if(ch == 'n') { */
+				if(ch == 'n') {
+					start_mode((mode + 1) % NUM_MODES);
+				} else if(ch == 'p') {
+					start_mode((mode - 1) % NUM_MODES);
+				} else if(ch == 'e') {
+					watchdog_reboot();
+				} else {
+					printf("invalid input\n");
+				}
+			}
+		}
+	}
+	PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
 int
