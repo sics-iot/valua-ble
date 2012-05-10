@@ -6,6 +6,6 @@ endif
 CFLAGS = -DWITH_NULLMAC=1 -DENABLE_CCA_INTERRUPT=1 -DENABLE_FIFO_INTERRUPT=0 -DENABLE_UNBUFFERED_MODE=0 -DENABLE_FAST_TX=0
 CFLAGS += -DNETSTACK_RADIO=cc1020_driver -DNETSTACK_RDC=rawrdc_driver
 
-all: test-abc
+all: radio-jammer
 
 include $(CONTIKI)/Makefile.include

@@ -195,27 +195,6 @@ start_mode(enum modes to)
   default:;
   }
 }
-/*---------------------------------------------------------------------------*/
-// radio receiver callback
-/* static uint16_t rxbuf[64]; */
-/* static const uint8_t *rxbuf_ptr = (uint8_t *)rxbuf; */
-
-/* static void */
-/* packet_received(const struct radio_driver * r) */
-/* { */
-/* 	int len; */
-/* 	uint8_t *rxbuf_ptr; */
-/* 	/\* int i; *\/ */
-/* 	len = r->read(rxbuf, sizeof(rxbuf)); */
-/* 	if(len > 0) { */
-/* 	/\* if(len != 0 && len == 41) { *\/ */
-/* 		printf("%d: 0x", len); */
-/* 		for(rxbuf_ptr = (uint8_t *)&rxbuf[0];rxbuf_ptr < (uint8_t *)rxbuf + len;rxbuf_ptr++) { */
-/* 			printf("%02x", *rxbuf_ptr); */
-/* 		} */
-/* 		printf("\n"); */
-/* 	} */
-/* } */
 
 #define MAX_TX_PACKETS 999
 #define MAX_PHY_LEN 3
@@ -252,7 +231,7 @@ PROCESS_THREAD(test_process, ev, data)
   /* initialize transceiver mode */
   start_mode(INITIAL_MODE);
 
-  printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
+  printf("Test process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
 
   while(1) {
     PROCESS_WAIT_EVENT();
@@ -295,6 +274,7 @@ PROCESS_THREAD(test_process, ev, data)
 			/* 	} */
       /* } */
     } else if(ev == serial_line_event_message) {
+				PRINTF("!");
 				char ch = *(char *)data;
 				if(ch == '\0') {
 					ch = last_ch;
