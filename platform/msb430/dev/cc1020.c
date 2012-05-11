@@ -337,7 +337,7 @@ cc1020_read(void *buf, unsigned short size)
 {
   unsigned len;
 
-	PRINTF(".\n");
+	PRINTF(".%d\n",rxlen);
 
   if(cc1020_rxlen <= HDR_SIZE) {
     return 0;
