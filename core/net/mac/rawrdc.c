@@ -75,8 +75,8 @@ packet_input(void)
 	uint8_t *rxbuf_ptr;
 	/* int i; */
 	len = NETSTACK_RADIO.read(&rxbuf[0], sizeof(rxbuf));
+	printf("%d\n", len);
 	if(len > 0) {
-	/* if(len != 0 && len == 41) { */
 		printf("%d: 0x", len);
 		for(rxbuf_ptr = &rxbuf[0];rxbuf_ptr < rxbuf + len;rxbuf_ptr++) {
 			printf("%02x", *rxbuf_ptr);
