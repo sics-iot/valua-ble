@@ -272,7 +272,7 @@ PROCESS_THREAD(test_process, ev, data)
 			/* 		clock_delay(200); */
 			/* 		leds_off(LEDS_BLUE); */
 			/* 	} */
-      /* } */
+      }
     } else if(ev == serial_line_event_message) {
 				PRINTF("!");
 				char ch = *(char *)data;
@@ -297,7 +297,6 @@ PROCESS_THREAD(test_process, ev, data)
 					printf("invalid input\n");
 				}
 			}
-		}
 	}
 	PROCESS_END();
 }
