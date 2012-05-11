@@ -60,6 +60,7 @@ process_event_t serial_line_event_message;
 int
 serial_line_input_byte(unsigned char c)
 {
+	printf("#\n");
   static uint8_t overflow = 0; /* Buffer overflow: ignore until END */
   
   if(IGNORE_CHAR(c)) {
