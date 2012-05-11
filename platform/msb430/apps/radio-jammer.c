@@ -197,7 +197,7 @@ start_mode(enum modes to)
 }
 
 #define MAX_TX_PACKETS 999
-#define MAX_PHY_LEN 3
+#define MAX_PHY_LEN 5
 /* void */
 /* cc2420_set_receiver(void (*f)(const struct radio_driver *)); */
 /*---------------------------------------------------------------------------*/
