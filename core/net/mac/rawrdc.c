@@ -69,16 +69,12 @@ send_list(mac_callback_t sent, void *ptr, struct rdc_buf_list *buf_list)
 static void
 packet_input(void)
 {
-	//  NETSTACK_MAC.input();
-	int len;
-	uint8_t rxbuf[64];
 	uint8_t *rxbuf_ptr;
-	/* int i; */
-	len = NETSTACK_RADIO.read(&rxbuf[0], sizeof(rxbuf));
-	printf("%d\n", len);
-	if(len > 0) {
-		printf("%d: 0x", len);
-		for(rxbuf_ptr = &rxbuf[0];rxbuf_ptr < rxbuf + len;rxbuf_ptr++) {
+	printf("%d\n", packetbuf_datalen());
+	if(packetbuf_datalen() > 0) {
+		printf("%d: 0x", packetbuf_datalen());
+		/* for(rxbuf_ptr = &rxbuf[0];rxbuf_ptr < rxbuf + len;rxbuf_ptr++) { */
+		for(rxbuf_ptr = packetbuf_dataptr();rxbuf_ptr < packetbuf_dataptr() + packetbuf_datalen();rxbuf_ptr++) {
 			printf("%02x", *rxbuf_ptr);
 		}
 		printf("\n");
