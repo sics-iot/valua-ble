@@ -274,7 +274,6 @@ PROCESS_THREAD(test_process, ev, data)
 			/* 	} */
       }
     } else if(ev == serial_line_event_message) {
-				PRINTF("!");
 				char ch = *(char *)data;
 				if(ch == '\0') {
 					ch = last_ch;
