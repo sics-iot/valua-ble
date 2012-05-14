@@ -70,10 +70,10 @@ int jam_ena;
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 
 /* enum modes {RX, TX, SNIFF, JAM, MOD, UNMOD, CH}; */
-enum modes {RX, TX};
+enum modes {RX, TX, CH};
 
 enum modes mode;
-#define NUM_MODES 2
+#define NUM_MODES 3
 
 const enum modes INITIAL_MODE = RX;
 
@@ -145,10 +145,10 @@ start_mode(enum modes to)
   case RX: 
     printf("RX mode\n"); 
     break;
-  /* case CH: */
-  /*   printf("Channel sample mode\n"); */
-	/* 	etimer_set(&et, CLOCK_SECOND / 1); */
-  /*   break; */
+  case CH:
+    printf("Channel sample mode\n");
+		etimer_set(&et, CLOCK_SECOND / 1);
+    break;
   case TX: 
 		printf("TX mode\n"); 
 		seqno = 0;
@@ -258,7 +258,9 @@ PROCESS_THREAD(test_process, ev, data)
 					printf("cc2420_send error: %d\n", errno);
 				}
 				++seqno;
-      /* } else if(mode == CH) { */
+      } else if(mode == CH) {
+				uint8_t rssi = cc1020_get_rssi();
+				printf("rssi = %hu\n", rssi);
 			/* 	/\* int8_t rssi = cc2420_rssi(); *\/ */
 			/* 	int rssi; */
 			/* 	while(!(status() & BV(CC2420_RSSI_VALID))) { */
@@ -271,8 +273,7 @@ PROCESS_THREAD(test_process, ev, data)
 			/* 		leds_on(LEDS_BLUE); */
 			/* 		clock_delay(200); */
 			/* 		leds_off(LEDS_BLUE); */
-			/* 	} */
-      }
+			}
     } else if(ev == serial_line_event_message) {
 				char ch = *(char *)data;
 				if(ch == '\0') {
