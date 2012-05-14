@@ -221,8 +221,8 @@ PROCESS_THREAD(test_process, ev, data)
 	printf("MODEM = 0x%02x\n", reg);
 	//The PN9_ENABLE bit in the MODEM register enables the PN9 generator
 	#define PN9_ENABLE_BIT 2
-	reg |= 1<<PN9_ENABLE_BIT; 
-	cc1020_write_reg(CC1020_MODEM, reg);
+	/* reg |= 1<<PN9_ENABLE_BIT;  */
+	/* cc1020_write_reg(CC1020_MODEM, reg); */
 
 	/* button_sensor.configure(SENSORS_ACTIVE, 1); */
 
