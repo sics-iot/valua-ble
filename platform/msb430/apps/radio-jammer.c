@@ -260,7 +260,7 @@ PROCESS_THREAD(test_process, ev, data)
 				++seqno;
       } else if(mode == CH) {
 				uint8_t rssi = cc1020_get_rssi();
-				printf("rssi = %hu\n", rssi);
+				printf("rssi = %u\n", (unsigned)rssi);
 			/* 	/\* int8_t rssi = cc2420_rssi(); *\/ */
 			/* 	int rssi; */
 			/* 	while(!(status() & BV(CC2420_RSSI_VALID))) { */
