@@ -357,6 +357,7 @@ packet_input(void)
 		for(rxbuf_ptr = packetbuf_dataptr();rxbuf_ptr < packetbuf_dataptr() + packetbuf_datalen();rxbuf_ptr++) {
 			printf("%02x", *rxbuf_ptr);
 		}
+		printf(" RSSI %u\n", (unsigned)cc1020_get_packet_rssi());
 		printf("\n");
 	}
 }
