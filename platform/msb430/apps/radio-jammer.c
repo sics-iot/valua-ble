@@ -117,6 +117,10 @@ AUTOSTART_PROCESSES(&test_process);
 #define DIO_BIT 1
 /* static volatile char dma_done; */
 /* Transmit a continuous carrier */
+
+#define MS_DELAY(x) clock_delay(354 * (x))
+extern volatile enum cc1020_state cc1020_state;
+
 void
 send_carrier(int mode)
 {
@@ -138,6 +142,43 @@ send_carrier(int mode)
 	reg = reg & (1<<DIO_BIT) ? reg & ~(1<<DIO_BIT) : reg | (1<<DIO_BIT);
 	P3OUT = reg;
 	printf("P3OUT = 0x%02x\n", (unsigned)reg);
+
+  /* cc1020_wakeupTX(TX_CURRENT); */
+
+  /* Turn on crystal oscillator core. */
+  cc1020_write_reg(CC1020_MAIN, 0xDB);
+  /* Setup bias current adjustment. */
+  cc1020_write_reg(CC1020_ANALOG, TX_CURRENT);
+  /*
+   * Wait for the crystal oscillator to stabilize.
+   * This typically takes 2-5 ms.
+   */
+  MS_DELAY(5);
+  /* Turn on bias generator. */
+  cc1020_write_reg(CC1020_MAIN, 0xD9);
+  /* Turn on frequency synthesizer. */
+  MS_DELAY(1);
+  cc1020_write_reg(CC1020_MAIN, 0xD1);
+
+  /* cc1020_setupTX(TX_CURRENT); */
+  char lock_status;
+
+  /* Switch into TX, switch to freq. reg B */
+  cc1020_write_reg(CC1020_MAIN, 0xC1);
+  lock_status = cc1020_lock();
+
+  /* Restore PA_POWER */
+  cc1020_write_reg(CC1020_PA_POWER, PA_POWER);
+
+  /* Turn OFF DCLK squelch in TX */
+  cc1020_write_reg(CC1020_INTERFACE, 0x01);
+
+  P3SEL |= 0x0C;		/* select Tx line and clk */
+  U0CTL |= SWRST;		/* UART to reset mode */
+  IFG1 &= ~UTXIFG0;		/* Reset IFG. */
+
+  /* configure driver */
+  CC1020_SET_OPSTATE(CC1020_TX);
 
 	/* uint8_t foo = 0xAA; */
   /* dma_done = 0; */

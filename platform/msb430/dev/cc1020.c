@@ -77,7 +77,8 @@ static void cc1020_reset(void);
 static const uint8_t syncword[SYNCWORD_SIZE] = {0xD3, 0x91};
 
 /* current mode of cc1020 chip */
-static volatile enum cc1020_state cc1020_state = CC1020_OFF;
+/* static volatile enum cc1020_state cc1020_state = CC1020_OFF; */
+volatile enum cc1020_state cc1020_state = CC1020_OFF;
 static volatile uint8_t cc1020_rxbuf[HDR_SIZE + CC1020_BUFFERSIZE];
 static uint8_t cc1020_txbuf[PREAMBLE_SIZE + SYNCWORD_SIZE + HDR_SIZE +
 			   CC1020_BUFFERSIZE + TAIL_SIZE];
@@ -686,7 +687,8 @@ cc1020_calibrate(void)
   return (cc1020_read_reg(CC1020_STATUS) & LOCK_CONTINUOUS) == LOCK_CONTINUOUS;
 }
 
-static int
+/* static int */
+int
 cc1020_lock(void)
 {
   char lock_status;
