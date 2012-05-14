@@ -114,6 +114,8 @@ AUTOSTART_PROCESSES(&test_process);
 /* } */
 /*---------------------------------------------------------------------------*/
 #define PN9_ENABLE_BIT 2
+#define DIO_BIT 1
+static volatile char dma_done;
 /* Transmit a continuous carrier */
 void
 send_carrier(int mode)
@@ -123,6 +125,19 @@ send_carrier(int mode)
 	//The PN9_ENABLE bit in the MODEM register enables the PN9 generator
 	reg |= 1<<PN9_ENABLE_BIT; 
 	cc1020_write_reg(CC1020_MODEM, reg);
+	reg = cc1020_read_reg(CC1020_MODEM);
+	printf("MODEM = 0x%02x\n", (unsigned)reg);
+	//A transition on the DIO pin is required after enabling the PN9 pseudo random sequence.
+	/* reg = P3OUT; */
+	/* printf("P3OUT = 0x%02x\n", (unsigned)reg); */
+	/* reg = reg & (1<<DIO_BIT) ? reg & ~(1<<DIO_BIT) : reg | (1<<DIO_BIT); */
+	/* P3OUT = reg; */
+	/* printf("P3OUT = 0x%02x\n", (unsigned)reg); */
+
+	uint8_t foo = 0xAA;
+  dma_done = 0;
+  dma_transfer((unsigned char *)&TXBUF0, foo, 1);
+  while(!dma_done);
 }
 /*---------------------------------------------------------------------------*/
 #define TX_INTERVAL CLOCK_SECOND / 1
