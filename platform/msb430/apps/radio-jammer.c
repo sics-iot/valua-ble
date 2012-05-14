@@ -44,6 +44,7 @@
 #include "dev/serial-line.h"
 #include "dev/spi.h"
 #include "dev/cc1020.h"
+#include "dev/cc1020-internal.h"
 #include "node-id.h"
 #include "lib/random.h"
 #include "dev/radio.h"
@@ -70,10 +71,10 @@ int jam_ena;
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 
 /* enum modes {RX, TX, SNIFF, JAM, MOD, UNMOD, CH}; */
-enum modes {RX, TX, CH};
+enum modes {RX, TX, CH, MOD};
 
 enum modes mode;
-#define NUM_MODES 3
+#define NUM_MODES 4
 
 const enum modes INITIAL_MODE = RX;
 
@@ -111,30 +112,32 @@ AUTOSTART_PROCESSES(&test_process);
 /*   /\* enter RX mode *\/ */
 /*   strobe(CC2420_SRXON); */
 /* } */
-/* /\*---------------------------------------------------------------------------*\/ */
-/* /\* Transmit a continuous carrier *\/ */
-/* void */
-/* send_carrier(int mode) */
-/* { */
-/*   unsigned reg = getreg(CC2420_MDMCTRL1); */
-/*   if(mode == UNMOD) { */
-/* 		/\* unmodulated carrier *\/ */
-/*     reg = (reg & 0xFFF3) | (3 << 2); */
-/*     setreg(CC2420_MDMCTRL1, reg); */
-/*     setreg(CC2420_DACTST, 0x1800); */
-/*   } else if(mode == MOD) { */
-/* 		/\* randomly modulated carrier *\/ */
-/*     reg = (reg & 0xFFF3) | (3 << 2); */
-/*     setreg(CC2420_MDMCTRL1, reg); */
-/*   } */
-/* 	strobe(CC2420_STXON); */
-/* } */
+/*---------------------------------------------------------------------------*/
+#define PN9_ENABLE_BIT 2
+/* Transmit a continuous carrier */
+void
+send_carrier(int mode)
+{
+	uint8_t reg = cc1020_read_reg(CC1020_MODEM);
+	printf("MODEM = 0x%02x\n", (unsigned)reg);
+	//The PN9_ENABLE bit in the MODEM register enables the PN9 generator
+	reg |= 1<<PN9_ENABLE_BIT; 
+	cc1020_write_reg(CC1020_MODEM, reg);
+}
 /*---------------------------------------------------------------------------*/
 #define TX_INTERVAL CLOCK_SECOND / 1
 static void
 start_mode(enum modes to)
 {
-	unsigned reg;
+	uint8_t reg;
+	/* stop PN9 generator */
+	if(mode == MOD) {
+		reg = cc1020_read_reg(CC1020_MODEM);
+		reg &= !(1<<PN9_ENABLE_BIT); 
+		cc1020_write_reg(CC1020_MODEM, reg);
+		reg = cc1020_read_reg(CC1020_MODEM);
+		printf("MODEM = 0x%02x\n", (unsigned)reg);
+	}
   mode = to;
 	/* DISABLE_CCA_INT(); */
 	/* DISABLE_FIFO_INT(); */
@@ -159,10 +162,10 @@ start_mode(enum modes to)
 /* 		printf("Unmodulated carrier mode\n");  */
 /* 		send_carrier(mode);  */
 /* 		break; */
-/*   case MOD:  */
-/* 		printf("Modulated carrier mode\n");  */
-/* 		send_carrier(mode);  */
-/* 		break; */
+  case MOD:
+		printf("Modulated carrier mode\n");
+		send_carrier(mode);
+		break;
 /* 	case JAM: */
 /* 		printf("Jam mode\n"); */
 /* 		jam_ena = 1; */
@@ -213,6 +216,13 @@ PROCESS_THREAD(test_process, ev, data)
 	/* node_id_burn(1); */
 
 	d = &cc1020_driver;
+
+	uint8_t reg = cc1020_read_reg(CC1020_MODEM);
+	printf("MODEM = 0x%02x\n", reg);
+	//The PN9_ENABLE bit in the MODEM register enables the PN9 generator
+	#define PN9_ENABLE_BIT 2
+	reg |= 1<<PN9_ENABLE_BIT; 
+	cc1020_write_reg(CC1020_MODEM, reg);
 
 	/* button_sensor.configure(SENSORS_ACTIVE, 1); */
 
