@@ -133,7 +133,7 @@ start_mode(enum modes to)
 	/* stop PN9 generator */
 	if(mode == MOD) {
 		reg = cc1020_read_reg(CC1020_MODEM);
-		reg &= !(1<<PN9_ENABLE_BIT); 
+		reg &= ~(0x1<<PN9_ENABLE_BIT); 
 		cc1020_write_reg(CC1020_MODEM, reg);
 		reg = cc1020_read_reg(CC1020_MODEM);
 		printf("MODEM = 0x%02x\n", (unsigned)reg);
@@ -219,10 +219,6 @@ PROCESS_THREAD(test_process, ev, data)
 
 	uint8_t reg = cc1020_read_reg(CC1020_MODEM);
 	printf("MODEM = 0x%02x\n", reg);
-	//The PN9_ENABLE bit in the MODEM register enables the PN9 generator
-	#define PN9_ENABLE_BIT 2
-	/* reg |= 1<<PN9_ENABLE_BIT;  */
-	/* cc1020_write_reg(CC1020_MODEM, reg); */
 
 	/* button_sensor.configure(SENSORS_ACTIVE, 1); */
 
