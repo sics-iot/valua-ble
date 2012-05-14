@@ -70,10 +70,9 @@ static void
 packet_input(void)
 {
 	uint8_t *rxbuf_ptr;
-	printf("%d\n", packetbuf_datalen());
+	PRINTF("%d\n", packetbuf_datalen());
 	if(packetbuf_datalen() > 0) {
 		printf("%d: 0x", packetbuf_datalen());
-		/* for(rxbuf_ptr = &rxbuf[0];rxbuf_ptr < rxbuf + len;rxbuf_ptr++) { */
 		for(rxbuf_ptr = packetbuf_dataptr();rxbuf_ptr < packetbuf_dataptr() + packetbuf_datalen();rxbuf_ptr++) {
 			printf("%02x", *rxbuf_ptr);
 		}
