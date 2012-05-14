@@ -136,7 +136,7 @@ send_carrier(int mode)
 
 	uint8_t foo = 0xAA;
   dma_done = 0;
-  dma_transfer((unsigned char *)&TXBUF0, foo, 1);
+  dma_transfer((unsigned char *)&TXBUF0, &foo, 1);
   while(!dma_done);
 }
 /*---------------------------------------------------------------------------*/
