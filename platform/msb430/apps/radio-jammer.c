@@ -130,7 +130,7 @@ send_carrier(int mode)
 	//A transition on the DIO pin is required after enabling the PN9 pseudo random sequence.
 	reg = P3DIR;
 	printf("P3DIR = 0x%02x\n", (unsigned)reg);
-	reg |= 1<<DIO_BIT;
+	reg &= ~(1<<DIO_BIT);
 	P3DIR = reg;
 	printf("P3DIR = 0x%02x\n", (unsigned)reg);
 	reg = P3OUT;
