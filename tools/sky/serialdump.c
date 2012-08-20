@@ -1,9 +1,14 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
 
 #define BAUDRATE B57600
 #define BAUDRATE_S "57600"
@@ -159,7 +164,7 @@ int main(int argc, char **argv)
   }
   fprintf(stderr, "connecting to %s (%s)", device, speedname);
 
-  fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY | O_DIRECT | O_SYNC );
+  fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY | O_SYNC );
   if (fd <0) {
     fprintf(stderr, "\n");
     perror(device);
