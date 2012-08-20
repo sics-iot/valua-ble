@@ -1,6 +1,4 @@
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -9,6 +7,8 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define BAUDRATE B57600
 #define BAUDRATE_S "57600"
@@ -164,7 +164,11 @@ int main(int argc, char **argv)
   }
   fprintf(stderr, "connecting to %s (%s)", device, speedname);
 
+#ifndef __APPLE__
   fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY | O_SYNC );
+#else
+  fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY | O_SYNC );
+#endif
   if (fd <0) {
     fprintf(stderr, "\n");
     perror(device);
