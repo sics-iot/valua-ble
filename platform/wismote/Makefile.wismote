@@ -44,8 +44,11 @@ contiki-$(TARGET).a: ${addprefix $(OBJECTDIR)/,symbols.o}
 %.hex: %.ihex
 	mv $< $@
 
-%.upload: %.hex
-	msp430flasher -n msp430x5437 -e ERASE_MAIN -w $< -v -z [VCC]
+# %.upload: %.hex
+# 	msp430flasher -n msp430x5437 -e ERASE_MAIN -w $< -v -z [VCC]
+	
+%.upload: %.wismote
+	msp430-objcopy -O ihex $< upload.hex; python -m msp430.bsl5.uart -p /dev/ttyUSB0 --erase=0x8000-0x3FFFF upload.hex ; rm upload.hex 	
 
 %.upload-clean: %.hex
 	msp430flasher -n msp430x5437 -w $< -v -z [VCC]
