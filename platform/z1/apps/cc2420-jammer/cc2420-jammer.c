@@ -63,7 +63,14 @@
 #define CHANNEL 16
 #define DEFAULT_TXPOWER_LEVEL 27
 
-int jam_ena;
+#define BUSYWAIT_UNTIL(cond, max_time)                                  \
+  do {                                                                  \
+    rtimer_clock_t t0;                                                  \
+    t0 = RTIMER_NOW();                                                  \
+    while(!(cond) && RTIMER_CLOCK_LT(RTIMER_NOW(), t0 + (max_time)));   \
+  } while(0)
+
+extern int jam_ena;
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 
@@ -88,39 +95,28 @@ static unsigned
 getreg(enum cc2420_register regname)
 {
   unsigned reg;
-  FASTSPI_GETREG(regname, reg);
+  CC2420_READ_REG(regname, reg);
   return reg;
 }
 /*---------------------------------------------------------------------------*/
 static void
 setreg(enum cc2420_register regname, unsigned value)
 {
-  FASTSPI_SETREG(regname, value);
+  CC2420_WRITE_REG(regname, value);
 }
 /*---------------------------------------------------------------------------*/
 static void
 strobe(enum cc2420_register regname)
 {
-  FASTSPI_STROBE(regname);
+  CC2420_STROBE(regname);
 }
 /*---------------------------------------------------------------------------*/
 static unsigned int
 status(void)
 {
   uint8_t status;
-  FASTSPI_UPD_STATUS(status);
+  CC2420_GET_STATUS(status);
   return status;
-}
-/*---------------------------------------------------------------------------*/
-static void
-flushrx(void)
-{
-  uint8_t dummy;
-
-  FASTSPI_READ_FIFO_BYTE(dummy);
-  FASTSPI_STROBE(CC2420_SFLUSHRX);
-  FASTSPI_STROBE(CC2420_SFLUSHRX);
-  /* rxptr = 0; */
 }
 /*---------------------------------------------------------------------------*/
 /* Reset transmitter to normal packet mode */
@@ -172,9 +168,9 @@ start_mode(enum modes to)
 {
 	unsigned reg;
   mode = to;
-	DISABLE_CCA_INT();
-	DISABLE_FIFO_INT();
-	ENABLE_FIFOP_INT();
+	CC2420_DISABLE_CCA_INT();
+	CC2420_DISABLE_FIFO_INT();
+	CC2420_ENABLE_FIFOP_INT();
 	jam_ena = 0;
 	reset_transmitter();
   switch(mode) {
@@ -188,7 +184,7 @@ start_mode(enum modes to)
   case TX: 
 		printf("TX mode\n"); 
 		seqno = 0;
-		DISABLE_FIFOP_INT(); // disable cc2420 interrupt
+		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt
 		etimer_set(&et, TX_INTERVAL);
 		break;
   case UNMOD: 
@@ -202,18 +198,18 @@ start_mode(enum modes to)
 	case JAM:
 		printf("Jam mode\n");
 		jam_ena = 1;
-		DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
+		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
 #if ENABLE_CCA_INTERRUPT
-		ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
+		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
 #elif ENABLE_FIFO_INTERRUPT
 		ENABLE_FIFO_INT(); // enable cc2420 "packet header detected" interrupt
 #endif
 		break;
 	case SNIFF:
 		printf("Sniff mode\n");
-		DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
+		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
 #if ENABLE_CCA_INTERRUPT
-		ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
+		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
 #elif ENABLE_FIFO_INTERRUPT
 		ENABLE_FIFO_INT(); // enable cc2420 "packet header detected" interrupt
 #elif ENABLE_UNBUFFERED_MODE
@@ -274,16 +270,16 @@ PROCESS_THREAD(test_process, ev, data)
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
 	/* initialize GIO pins */
-  GIO_PxDIR |= (GIO2_BV | GIO3_BV);
-  GIO_PxOUT &= ~(GIO2_BV | GIO3_BV);
+  /* GIO_PxDIR |= (GIO2_BV | GIO3_BV); */
+  /* GIO_PxOUT &= ~(GIO2_BV | GIO3_BV); */
 	// toggle GIO2 for testing
-	GIO_PxOUT |= GIO2_BV;
-	GIO_PxOUT &= ~GIO2_BV;
+	/* GIO_PxOUT |= GIO2_BV; */
+	/* GIO_PxOUT &= ~GIO2_BV; */
 
   cc2420_set_channel(CHANNEL);
 	cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL);
 
-	d->set_receive_function(&packet_received);
+	/* d->set_receive_function(&packet_received); */
 
   /* initialize transceiver mode */
   start_mode(INITIAL_MODE);
@@ -334,13 +330,11 @@ PROCESS_THREAD(test_process, ev, data)
       } else if(mode == CH) {
 				/* int8_t rssi = cc2420_rssi(); */
 				int rssi;
-				while(!(status() & BV(CC2420_RSSI_VALID))) {
-					/*    printf("cc2420_rssi: RSSI not valid.\n");*/
-				}
+				BUSYWAIT_UNTIL(status() & BV(CC2420_RSSI_VALID), RTIMER_SECOND / 100);
 				rssi = (int)((signed char)getreg(CC2420_RSSI));
 				unsigned lna = getreg(CC2420_AGCCTRL) & 0x0003;
 				printf("rssi = %d, lna = %u\n", rssi, lna);
-				if(!CCA_IS_1) {
+				if(!CC2420_CCA_IS_1) {
 					leds_on(LEDS_BLUE);
 					clock_delay(200);
 					leds_off(LEDS_BLUE);

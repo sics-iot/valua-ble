@@ -67,8 +67,10 @@
 /* Network setup for non-IPv6 (rime). */
 
 #define NETSTACK_CONF_NETWORK rime_driver
-#define NETSTACK_CONF_MAC     csma_driver
-#define NETSTACK_CONF_RDC     contikimac_driver
+/* #define NETSTACK_CONF_MAC     csma_driver */
+/* #define NETSTACK_CONF_RDC     contikimac_driver */
+#define NETSTACK_CONF_MAC     nullmac_driver
+#define NETSTACK_CONF_RDC     nullrdc_driver
 #define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE 8
 #define NETSTACK_CONF_FRAMER  framer_802154
 

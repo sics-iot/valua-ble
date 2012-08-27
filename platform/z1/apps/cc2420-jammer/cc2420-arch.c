@@ -48,48 +48,43 @@ extern rtimer_clock_t cc2420_interrupt_time;
 enum modes {RX, TX, SNIFF, JAM, MOD, UNMOD, CH};
 extern enum modes mode;
 /*---------------------------------------------------------------------------*/
-interrupt(PORT1_VECTOR)
-cc24240_port1_interrupt(void)
+// called from real ISR from PORT1
+int
+cc2420_port1_interrupt(void)
 {
-	GIO_PxOUT |= GIO2_BV;
-	GIO_PxOUT &= ~GIO2_BV;
-#if CC2420_CONF_TIMESTAMPS
-	cc2420_interrupt_time = RTIMER_NOW();
-#endif
-  ENERGEST_ON(ENERGEST_TYPE_IRQ);
+	/* GIO_PxOUT |= GIO2_BV; */
+	/* GIO_PxOUT &= ~GIO2_BV; */
 	/* indicates packet size has exceeded RXFIFO threshold or packet reception has ended */
-	if(P1IFG & BV(FIFO_P)) {
+	if(CC2420_FIFOP_IS_1) {
 #if ENABLE_UNBUFFERED_MODE
 		if(mode == SNIFF) {
 			if(cc2420_fifop_interrupt()) {
-				LPM4_EXIT;
+				return1;
 			}
 		} else if (cc2420_interrupt()) {
-				LPM4_EXIT;
+				return 1;
 		}
 #else
 		if(cc2420_interrupt()) {
-			LPM4_EXIT;
+			return 1;
 		}
 #endif
 	}
 #if ENABLE_CCA_INTERRUPT
 	/* /\* CCA flag on while FIFOP flag off: packet header just arrived *\/ */
-	else if(P1IFG & BV(CCA)) {
+	else if(CC2420_CCA_IS_1) {
 		if(cc2420_cca_interrupt()) {
-			LPM4_EXIT;
+			return 1;
 		}
 	}
 #elif ENABLE_FIFO_INTERRUPT
-	else if(P1IFG & BV(FIFO)) {
+	else if(CC2420_FIFO_IS_1) {
 		if(cc2420_fifo_interrupt(0)) {
-			LPM4_EXIT;
+			return 1;
 		}
 	}
 #endif
-  ENERGEST_OFF(ENERGEST_TYPE_IRQ);
 }
-
 /*---------------------------------------------------------------------------*/
 void
 cc2420_arch_init(void)
@@ -97,12 +92,14 @@ cc2420_arch_init(void)
   spi_init();
 
   /* all input by default, set these as output */
-  P4DIR |= BV(CSN) | BV(VREG_EN) | BV(RESET_N);
+  CC2420_CSN_PORT(DIR) |= BV(CC2420_CSN_PIN);
+  CC2420_VREG_PORT(DIR) |= BV(CC2420_VREG_PIN);
+  CC2420_RESET_PORT(DIR) |= BV(CC2420_RESET_PIN);
 
 /* #if CONF_SFD_TIMESTAMPS */
   /* cc2420_arch_sfd_init(); */
 /* #endif */
 
-  SPI_DISABLE();                /* Unselect radio. */
+  CC2420_SPI_DISABLE();                /* Unselect radio. */
 }
 /*---------------------------------------------------------------------------*/
