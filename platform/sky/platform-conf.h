@@ -199,6 +199,14 @@ typedef unsigned long off_t;
 #define CC2420_DISABLE_FIFOP_INT() do {CC2420_FIFOP_PORT(IE) &= ~BV(CC2420_FIFOP_PIN);} while(0)
 #define CC2420_CLEAR_FIFOP_INT()   do {CC2420_FIFOP_PORT(IFG) &= ~BV(CC2420_FIFOP_PIN);} while(0)
 
+#define CC2420_ENABLE_CCA_INT()  do {CC2420_CCA_PORT(IE) |= BV(CC2420_CCA_PIN);} while(0)
+#define CC2420_DISABLE_CCA_INT() do {CC2420_CCA_PORT(IE) &= ~BV(CC2420_CCA_PIN);} while(0)
+#define CC2420_CLEAR_CCA_INT()   do {CC2420_CCA_PORT(IFG) &= ~BV(CC2420_CCA_PIN);} while(0)
+
+#define CC2420_ENABLE_FIFO_INT()  do {CC2420_FIFO_PORT(IE) |= BV(CC2420_FIFO_PIN);} while(0)
+#define CC2420_DISABLE_FIFO_INT() do {CC2420_FIFO_PORT(IE) &= ~BV(CC2420_FIFO_PIN);} while(0)
+#define CC2420_CLEAR_FIFO_INT()   do {CC2420_FIFO_PORT(IFG) &= ~BV(CC2420_FIFO_PIN);} while(0)
+
 /*
  * Enables/disables CC2420 access to the SPI bus (not the bus).
  * (Chip Select)

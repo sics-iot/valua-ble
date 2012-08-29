@@ -33,9 +33,11 @@
 
 /**
  * \file
- *         A MAC protocol that does not do anything.
+ *         A RDC layer that does not go to sleep and does not call back any upper layer
+ *         upon packet received
  * \author
  *         Adam Dunkels <adam@sics.se>
+ *         Zhitao He <zhitao@sics.se>
  */
 
 #include "net/mac/nullrdc-noframer.h"
@@ -71,15 +73,12 @@ packet_input(void)
 {
 	//  NETSTACK_MAC.input();
 	int len;
-	uint8_t rxbuf[64];
-	uint8_t *rxbuf_ptr;
-	/* int i; */
-	len = NETSTACK_RADIO.read(&rxbuf[0], sizeof(rxbuf));
+	len = packetbuf_datalen();
 	if(len > 0) {
-	/* if(len != 0 && len == 41) { */
 		printf("%d: 0x", len);
-		for(rxbuf_ptr = &rxbuf[0];rxbuf_ptr < rxbuf + len;rxbuf_ptr++) {
-			printf("%02x", *rxbuf_ptr);
+		int i;
+		for(i = 0; i < len; i++) {
+			printf("%02x", *((unsigned char *)(packetbuf_dataptr() + i)));
 		}
 		printf("\n");
 	}

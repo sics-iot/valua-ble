@@ -249,7 +249,7 @@ packet_received(const struct radio_driver * r)
 	}
 }
 
-#define MAX_TX_PACKETS 999
+#define MAX_TX_PACKETS 100
 #define MAX_PHY_LEN 3
 void
 cc2420_set_receiver(void (*f)(const struct radio_driver *));
@@ -307,8 +307,6 @@ PROCESS_THREAD(test_process, ev, data)
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
 			etimer_reset(&et);
       if(mode == TX && seqno < MAX_TX_PACKETS) {
-				/* time_send = RTIMER_NOW(); */
-				/* clock_delay(seqno % 4 + 1); */
 #if ENABLE_FAST_TX
 				char str[1+MAX_PHY_LEN]; // PHY HDR + payload
 				memset(str, 0, sizeof(str));
@@ -316,13 +314,14 @@ PROCESS_THREAD(test_process, ev, data)
 				snprintf(&str[1], sizeof(str)-1, "%u", seqno);
 				errno = d->send(str, sizeof(str)); // PHY HDR + PHY payload -> TX FIFO
 #else
-				char str[MAX_PHY_LEN];//
+				char str[MAX_PHY_LEN];
 				memset(str, 0, sizeof(str));
 				snprintf(str, sizeof(str), "%u", seqno);
 				errno = d->send(str, sizeof(str));
 #endif
 				if (errno == RADIO_TX_OK) {
-					printf("cc2420_send ok: %d bytes\n", sizeof(str));
+					/* printf("cc2420_send ok: %d bytes\n", sizeof(str)); */
+					printf("cc2420_send ok: %s\n", str);
 				} else {
 					printf("cc2420_send error: %d\n", errno);
 				}
