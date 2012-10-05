@@ -59,13 +59,13 @@ volatile uint16_t cc2420_arch_sfd_end_time;
 /* } */
 /*---------------------------------------------------------------------------*/
 /* SFD interrupt for detecting packet arrivals */
-interrupt(TIMERB1_VECTOR)
-cc24240_timerb1_interrupt(void)
-{
-	if(cc2420_sfd_interrupt()) {
-		LPM4_EXIT;
-	}
-}
+/* interrupt(TIMERB1_VECTOR) */
+/* cc24240_timerb1_interrupt(void) */
+/* { */
+/* 	if(cc2420_sfd_interrupt()) { */
+/* 		LPM4_EXIT; */
+/* 	} */
+/* } */
 /*---------------------------------------------------------------------------*/
 /* void */
 /* cc2420_arch_sfd_init(void) */
@@ -88,15 +88,20 @@ void
 cc2420_arch_sfd_init(void)
 {
   /* Need to select the special function! */
-  P4SEL = BV(CC2420_SFD_PIN);
+  /* P4SEL = BV(CC2420_SFD_PIN); */
   
   /* start timer B - 32768 ticks per second */
-  TBCTL = TBSSEL_1 | TBCLR;
+  /* TBCTL = TBSSEL_1 | TBCLR; */
+  /* start timer B -  SMCLK-defined ticks per second */
+  TBCTL = TBSSEL_2 | TBCLR | ID_1;
   
   /* CM_1 = capture mode - capture on rising edge */
   TBCCTL1 = CM_1 | CAP | SCS;
+  /* CM_1 = capture mode - capture on both edge */
+  TBCCTL1 = CM_3 | CAP | SCS | CCIS1;
+
   /* TBCCTL1 |= CCIE; */
-  
+	
   /* Start Timer_B in continuous mode. */
   TBCTL |= MC1;
 }

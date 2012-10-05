@@ -401,13 +401,13 @@ ISR(PORT1, port1_isr)
     }
   } else {
     /* CC2420 interrupt */
-    if(cc2420_interrupt()) {
-      LPM4_EXIT;
-    }
+//    if(cc2420_interrupt()) {
+//      LPM4_EXIT;
+//    }
 	  // Zhitao: jump to my customized CC2420 ISR
-//	  if(cc2420_port1_interrupt()) {
-//		  LPM4_EXIT;
-//	  }
+	  if(cc2420_port1_interrupt()) {
+		  LPM4_EXIT;
+	  }
   }
   ENERGEST_OFF(ENERGEST_TYPE_IRQ);
 }

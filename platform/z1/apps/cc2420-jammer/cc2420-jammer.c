@@ -32,7 +32,7 @@
 
 /**
  * \file
- *         Channel jammer program for Z1
+ *         Channel jammer program for CC2420
  * \author
  *         Zhitao He <zhitao@sics.se>
  */
@@ -74,7 +74,7 @@ extern int jam_ena;
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 
-enum modes {RX, TX, SNIFF, JAM, MOD, UNMOD, CH};
+enum modes {RX, JAM, TX, SNIFF, MOD, UNMOD, CH};
 
 enum modes mode;
 #define NUM_MODES 7
@@ -117,6 +117,16 @@ status(void)
   uint8_t status;
   CC2420_GET_STATUS(status);
   return status;
+}
+/*---------------------------------------------------------------------------*/
+static void
+flushrx(void)
+{
+  uint8_t dummy;
+
+  CC2420_READ_FIFO_BYTE(dummy);
+  CC2420_STROBE(CC2420_SFLUSHRX);
+  CC2420_STROBE(CC2420_SFLUSHRX);
 }
 /*---------------------------------------------------------------------------*/
 /* Reset transmitter to normal packet mode */
@@ -162,26 +172,39 @@ send_carrier(int mode)
 	strobe(CC2420_STXON);
 }
 /*---------------------------------------------------------------------------*/
-#define TX_INTERVAL CLOCK_SECOND / 1
+#define TX_INTERVAL CLOCK_SECOND / 2
 static void
 start_mode(enum modes to)
 {
-	unsigned reg;
+	/* unsigned reg; */
+	if(mode == JAM) {
+		jam_ena = 0;
+		CC2420_DISABLE_CCA_INT();
+		CC2420_CLEAR_CCA_INT();
+	} else if(mode == TX) {
+		reset_transmitter();
+	}
   mode = to;
-	CC2420_DISABLE_CCA_INT();
-	CC2420_DISABLE_FIFO_INT();
-	CC2420_ENABLE_FIFOP_INT();
-	jam_ena = 0;
-	reset_transmitter();
+/* #if ENABLE_CCA_INTERRUPT */
+/* 		CC2420_CLEAR_CCA_INT(); */
+/* #endif */
+	/* CC2420_DISABLE_CCA_INT(); */
+	/* CC2420_DISABLE_FIFO_INT(); */
+	/* CC2420_ENABLE_FIFOP_INT(); */
+	/* jam_ena = 0; */
+	/* reset_transmitter(); */
   switch(mode) {
   case RX: 
-    printf("RX mode\n"); 
+		CC2420_CLEAR_FIFOP_INT();
+		CC2420_ENABLE_FIFOP_INT();
+		strobe(CC2420_SRXON);
+    printf("RX mode\n");
     break;
   case CH:
     printf("Channel sample mode\n");
 		etimer_set(&et, CLOCK_SECOND / 1);
     break;
-  case TX: 
+  case TX:
 		printf("TX mode\n"); 
 		seqno = 0;
 		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt
@@ -196,19 +219,25 @@ start_mode(enum modes to)
 		send_carrier(mode); 
 		break;
 	case JAM:
-		printf("Jam mode\n");
-		jam_ena = 1;
 		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
+		CC2420_CLEAR_FIFOP_INT();
+		flushrx();
 #if ENABLE_CCA_INTERRUPT
+		CC2420_CLEAR_CCA_INT();
 		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
 #elif ENABLE_FIFO_INTERRUPT
 		ENABLE_FIFO_INT(); // enable cc2420 "packet header detected" interrupt
 #endif
+		jam_ena = 1;
+		printf("Jam mode\n");
 		break;
 	case SNIFF:
 		printf("Sniff mode\n");
 		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
+		CC2420_CLEAR_FIFOP_INT();
+		flushrx();
 #if ENABLE_CCA_INTERRUPT
+		CC2420_CLEAR_CCA_INT();
 		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
 #elif ENABLE_FIFO_INTERRUPT
 		ENABLE_FIFO_INT(); // enable cc2420 "packet header detected" interrupt
@@ -229,25 +258,8 @@ start_mode(enum modes to)
 }
 /*---------------------------------------------------------------------------*/
 // radio receiver callback
-static uint16_t rxbuf[64];
+/* static uint16_t rxbuf[64]; */
 /* static const uint8_t *rxbuf_ptr = (uint8_t *)rxbuf; */
-
-static void
-packet_received(const struct radio_driver * r)
-{
-	int len;
-	uint8_t *rxbuf_ptr;
-	/* int i; */
-	len = r->read(rxbuf, sizeof(rxbuf));
-	if(len > 0) {
-	/* if(len != 0 && len == 41) { */
-		printf("%d: 0x", len);
-		for(rxbuf_ptr = (uint8_t *)&rxbuf[0];rxbuf_ptr < (uint8_t *)rxbuf + len;rxbuf_ptr++) {
-			printf("%02x", *rxbuf_ptr);
-		}
-		printf("\n");
-	}
-}
 
 #define MAX_TX_PACKETS 100
 #define MAX_PHY_LEN 3
@@ -269,12 +281,15 @@ PROCESS_THREAD(test_process, ev, data)
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
-	/* initialize GIO pins */
-  /* GIO_PxDIR |= (GIO2_BV | GIO3_BV); */
-  /* GIO_PxOUT &= ~(GIO2_BV | GIO3_BV); */
-	// toggle GIO2 for testing
-	/* GIO_PxOUT |= GIO2_BV; */
-	/* GIO_PxOUT &= ~GIO2_BV; */
+	/* initialize GPIO pins */
+	GPIO1_PORT(DIR) |= BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	GPIO2_PORT(DIR) |= BV(GPIO2_PIN);
+	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
+	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 
   cc2420_set_channel(CHANNEL);
 	cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL);
@@ -373,14 +388,14 @@ PROCESS_THREAD(test_process, ev, data)
 				ccamux = ccamux==31 ? 0 : ccamux+1;
 				reg = (reg & (~CCAMUX_BV)) | (ccamux<<0);
 				setreg(CC2420_IOCFG1, reg);
-				printf("IOCFG1 = 0x%04x\n", reg);
+				printf("CCAMUX = %02u\n", ccamux);
 			} else if(ch == 's') {
 				reg = getreg(CC2420_IOCFG1);
 				unsigned sfdmux = (reg & SFDMUX_BV) >> 5;
 				sfdmux = sfdmux==31 ? 0 : sfdmux+1;
 				reg = (reg & (~SFDMUX_BV)) | (sfdmux<<5);
 				setreg(CC2420_IOCFG1, reg);
-				printf("SFDMUX = %02hu\n", sfdmux);
+				printf("SFDMUX = %02u\n", sfdmux);
 			} else if(ch =='w') {
 					printf("tx power = %u\n", cc2420_get_txpower());
 			} else {

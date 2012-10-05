@@ -125,7 +125,7 @@ static uint8_t volatile pending;
     CC2420_SPI_ENABLE();                                                \
     SPI_WRITE(CC2420_RXFIFO | 0x40);                                    \
     (void)SPI_RXBUF;                                                    \
-    for(i = 0; i < (count); i++) {                                      \
+    for(i = 0; i < (c); i++) {                                      \
       SPI_READ(dummy);                               \
     }                                                                   \
     clock_delay(1);                                                     \
@@ -327,6 +327,12 @@ cc2420_init(void)
 #endif /* CC2420_CONF_AUTOACK */
 
 #if ENABLE_CCA_INTERRUPT
+#if CCA_TEST
+		CC2420_CCA_PORT(IES) &= ~BV(CC2420_CCA_PIN); // set CCA interrupt on rising edge
+#else
+		CC2420_CCA_PORT(IES) |= BV(CC2420_CCA_PIN); // set CCA interrupt on falling edge
+#endif
+		CC2420_CLEAR_CCA_INT();
 	/* Turn on CCA */
 #define CCA_MODE_BV (3<<6);
 #define CCA_MODE_1 (1<<6);
@@ -704,9 +710,46 @@ static char info_str[INFO_STR_NUM][32];
 /* static char **info_str_ptr = &info_str[0]; */
 static int info_str_index = 0;
 
+volatile uint16_t last_cc2420_cca_interrupt_time;
+volatile uint16_t cc2420_cca_interrupt_time;
+volatile uint16_t cc2420_cca_interrupt_interval;
+
+#define TEST_INTERVAL 80
+
 int
 cc2420_cca_interrupt(void)
 {
+	#if CCA_TEST
+	CC2420_CLEAR_CCA_INT();
+
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
+
+	// time stamp
+	TBCCTL1 ^= CCIS0;
+	cc2420_cca_interrupt_time = TBCCR1;
+	/* cc2420_cca_interrupt_interval = cc2420_cca_interrupt_time - last_cc2420_cca_interrupt_time; */
+
+	/* if (cc2420_cca_interrupt_interval < TEST_INTERVAL) { */
+	/* 	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* 	GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	/* } */
+	if (TBCCTL1 & COV) {
+		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+		GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
+		TBCCTL1 &= ~COV;
+	}
+
+	/* last_cc2420_cca_interrupt_time = cc2420_cca_interrupt_time; */
+
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	return 1;
+
+	#else
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+
 	static long int count = 0;
 	/* rtimer_clock_t start, end; */
 	uint8_t len;
@@ -717,7 +760,7 @@ cc2420_cca_interrupt(void)
 	/* while(!FIFO_IS_1) {;} // wait till first byte read */
   if(!CC2420_FIFO_IS_1) {
     /* If FIFO is 0, there is no packet in the RXFIFO. */
-		clock_delay(16);
+		clock_delay(16*F_CPU/1000000/4);
 	}
   if(CC2420_FIFO_IS_1) {
 		getrxbyte(&len);
@@ -731,19 +774,21 @@ cc2420_cca_interrupt(void)
 	if(jam_ena && decision(count, len, NULL) > 0) {
 		send_jam();
 		flushrx();
-		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %hu !", count, clock_seconds(), len);
+		snprintf(info_str[info_str_index], sizeof(info_str), "%d %u %u !", count, clock_seconds(), len);
  	} else {
 		/* read remaining payload bytes */
 		/* clock_delay(32*len/2*3); // 32 us per byte, 0.77 us per delay tick */
 		while(CC2420_SFD_IS_1) {;} // wait until reception finishes
 		FASTSPI_READ_FIFO_GARBAGE(len);
-		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %hu", count, clock_seconds(), len);
+		snprintf(info_str[info_str_index], sizeof(info_str), "%d %u %u", count, clock_seconds(), len);
 	}
 	process_post(&cc2420_debug_process, PROCESS_EVENT_MSG, info_str[info_str_index]);
 	info_str_index = info_str_index == INFO_STR_NUM - 1 ? 0 : info_str_index+1;
 	leds_off(LEDS_RED);
 	CC2420_CLEAR_CCA_INT();
 	return 1;
+
+	#endif
 }
 
 /*---------------------------------------------------------------------------*/

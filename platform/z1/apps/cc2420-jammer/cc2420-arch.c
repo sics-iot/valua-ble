@@ -52,8 +52,11 @@ extern enum modes mode;
 int
 cc2420_port1_interrupt(void)
 {
-	/* GIO_PxOUT |= GIO2_BV; */
-	/* GIO_PxOUT &= ~GIO2_BV; */
+	/* Toggle test pin */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+
 	/* indicates packet size has exceeded RXFIFO threshold or packet reception has ended */
 	if(CC2420_FIFOP_IS_1) {
 #if ENABLE_UNBUFFERED_MODE
@@ -71,8 +74,8 @@ cc2420_port1_interrupt(void)
 #endif
 	}
 #if ENABLE_CCA_INTERRUPT
-	/* /\* CCA flag on while FIFOP flag off: packet header just arrived *\/ */
-	else if(CC2420_CCA_IS_1) {
+	/* CCA flag on while FIFOP flag off: packet header just arrived */
+	else if(CC2420_CCA_PORT(IFG) & BV(CC2420_CCA_PIN)) {
 		if(cc2420_cca_interrupt()) {
 			return 1;
 		}
@@ -84,6 +87,7 @@ cc2420_port1_interrupt(void)
 		}
 	}
 #endif
+	return 1;
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -97,7 +101,7 @@ cc2420_arch_init(void)
   CC2420_RESET_PORT(DIR) |= BV(CC2420_RESET_PIN);
 
 /* #if CONF_SFD_TIMESTAMPS */
-  /* cc2420_arch_sfd_init(); */
+  cc2420_arch_sfd_init();
 /* #endif */
 
   CC2420_SPI_DISABLE();                /* Unselect radio. */
