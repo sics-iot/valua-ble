@@ -83,6 +83,12 @@ typedef unsigned long off_t;
 #define LEDS_CONF_GREEN  0x20
 #define LEDS_CONF_YELLOW 0x40
 
+/* GPIO ports */
+#define GPIO1_PORT(type)   P2##type
+#define GPIO1_PIN          3
+#define GPIO2_PORT(type)   P2##type
+#define GPIO2_PIN          6
+
 /* DCO speed resynchronization for more robust UART, etc. */
 #ifndef DCOSYNCH_CONF_ENABLED
 #define DCOSYNCH_CONF_ENABLED 1

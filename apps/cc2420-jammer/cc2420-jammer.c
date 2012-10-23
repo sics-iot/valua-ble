@@ -181,22 +181,16 @@ start_mode(enum modes to)
 		jam_ena = 0;
 		CC2420_DISABLE_CCA_INT();
 		CC2420_CLEAR_CCA_INT();
-	} else if(mode == TX) {
+	} else if(mode == TX || mode == MOD || mode == UNMOD) {
+	/* } else if(mode == TX) { */
 		reset_transmitter();
 	}
   mode = to;
-/* #if ENABLE_CCA_INTERRUPT */
-/* 		CC2420_CLEAR_CCA_INT(); */
-/* #endif */
-	/* CC2420_DISABLE_CCA_INT(); */
-	/* CC2420_DISABLE_FIFO_INT(); */
-	/* CC2420_ENABLE_FIFOP_INT(); */
-	/* jam_ena = 0; */
-	/* reset_transmitter(); */
   switch(mode) {
   case RX: 
 		CC2420_CLEAR_FIFOP_INT();
 		CC2420_ENABLE_FIFOP_INT();
+		flushrx();
 		strobe(CC2420_SRXON);
     printf("RX mode\n");
     break;
@@ -292,14 +286,15 @@ PROCESS_THREAD(test_process, ev, data)
 	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 
   /* cc2420_set_channel(CHANNEL); */
-	cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL);
+	/* cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL); */
 
-	/* d->set_receive_function(&packet_received); */
+	etimer_set(&et, CLOCK_SECOND *5);
+	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+  printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
 
   /* initialize transceiver mode */
   start_mode(INITIAL_MODE);
-
-  printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
 
 	unsigned reg;
 	reg = getreg(CC2420_IOCFG0);
