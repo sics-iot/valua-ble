@@ -107,6 +107,9 @@ int cc2420_authority_level_of_sender;
 
 int cc2420_packets_seen, cc2420_packets_read;
 
+enum modes {RX, JAM, TX, SNIFF, SERIAL_JAM, MOD, UNMOD, CH};
+extern enum modes mode;
+
 volatile int jam_ena;
 
 static uint8_t volatile pending;
@@ -307,11 +310,11 @@ cc2420_init(void)
 
   /* Turn on voltage regulator and reset. */
   SET_VREG_ACTIVE();
-  clock_delay(250);
+  clock_delay(250*4);
   SET_RESET_ACTIVE();
-  clock_delay(127);
+  clock_delay(127*4);
   SET_RESET_INACTIVE();
-  clock_delay(125);
+  clock_delay(125*4);
 
 
   /* Turn on the crystal oscillator. */
@@ -340,9 +343,6 @@ cc2420_init(void)
 #define CCA_MODE_3 (3<<6);
 	reg &= ~CCA_MODE_BV; //clear cca mode
 	reg |= CCA_MODE_2; // set cca mode
-	/* ENABLE_CCA_INT(); */
-#elif ENABLE_FIFO_INTERRUPT
-	/* ENABLE_FIFO_INT(); */
 #endif
 
 	/* Set preamble length */
@@ -689,7 +689,8 @@ send_jam(void)
 	/* setreg(CC2420_MDMCTRL1, (reg & 0xFFF3) | (3 << 2)); */
 	setreg(CC2420_MDMCTRL1, 0x064C);
 	strobe(CC2420_STXON);
-	clock_delay(255);
+	/* clock_delay(255); */
+	clock_delay(16*4*F_CPU/1000000);
   /* setreg(CC2420_MDMCTRL1, reg & 0xFFF0); */
   setreg(CC2420_MDMCTRL1, 0x0640);
   strobe(CC2420_SRXON);
@@ -719,21 +720,25 @@ volatile uint16_t cc2420_cca_interrupt_interval;
 int
 cc2420_cca_interrupt(void)
 {
-	#if CCA_TEST
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	// Temp fix: ignore CCA interrupt caused by self generated serial jamming
+	/* if(mode == SERIAL_JAM) { */
+	/* 	CC2420_CLEAR_CCA_INT(); */
+	/* 	return 1; */
+	/* } */
+#if CCA_TEST
 	CC2420_CLEAR_CCA_INT();
-
+	
 	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
 	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
-
+	
 	// time stamp
 	TBCCTL1 ^= CCIS0;
 	cc2420_cca_interrupt_time = TBCCR1;
 	/* cc2420_cca_interrupt_interval = cc2420_cca_interrupt_time - last_cc2420_cca_interrupt_time; */
-
-	/* if (cc2420_cca_interrupt_interval < TEST_INTERVAL) { */
-	/* 	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
-	/* 	GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
-	/* } */
+	
 	if (TBCCTL1 & COV) {
 		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 		GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
@@ -741,41 +746,47 @@ cc2420_cca_interrupt(void)
 	}
 
 	/* last_cc2420_cca_interrupt_time = cc2420_cca_interrupt_time; */
-
+	
 	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
 	return 1;
-
-	#else
-	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
-	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
-	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
-
+	
+#else
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	
 	static long int count = 0;
 	/* rtimer_clock_t start, end; */
 	uint8_t len;
-
-	leds_on(LEDS_RED);
-
+	
 	count++;
 	/* while(!FIFO_IS_1) {;} // wait till first byte read */
   if(!CC2420_FIFO_IS_1) {
-    /* If FIFO is 0, there is no packet in the RXFIFO. */
-		clock_delay(16*F_CPU/1000000/4);
+		/* If FIFO is 0, there is no packet in the RXFIFO. */
+		// NOTE: delay time depends on previous processing delay in ISR
+		clock_delay(22*F_CPU/1000000/4);
 	}
   if(CC2420_FIFO_IS_1) {
 		getrxbyte(&len);
 	} else {
 		flushrx();
 		CC2420_CLEAR_CCA_INT();
-		leds_off(LEDS_RED);
+		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+		GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
+		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+		
 		return 1;
 	}
+	
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
 
 	if(jam_ena && decision(count, len, NULL) > 0) {
 		send_jam();
 		flushrx();
 		snprintf(info_str[info_str_index], sizeof(info_str), "%d %u %u !", count, clock_seconds(), len);
- 	} else {
+	} else {
 		/* read remaining payload bytes */
 		/* clock_delay(32*len/2*3); // 32 us per byte, 0.77 us per delay tick */
 		while(CC2420_SFD_IS_1) {;} // wait until reception finishes
@@ -784,66 +795,16 @@ cc2420_cca_interrupt(void)
 	}
 	process_post(&cc2420_debug_process, PROCESS_EVENT_MSG, info_str[info_str_index]);
 	info_str_index = info_str_index == INFO_STR_NUM - 1 ? 0 : info_str_index+1;
-	leds_off(LEDS_RED);
 	CC2420_CLEAR_CCA_INT();
-	return 1;
-
-	#endif
-}
-
-/*---------------------------------------------------------------------------*/
-int
-cc2420_fifo_interrupt(int called)
-{
-	static long int count = 0;
-	/* rtimer_clock_t start, end; */
-	uint8_t len;
-	uint16_t buf[(HDR_LEN+1)/2];
-
-	leds_on(LEDS_RED);
-
-	/* read packet len */
-	getrxbyte(&len);
-	
-	/* read MAC header */
-	/* if(!called) { */
-	if(len != 5) {
-		while(!CC2420_FIFOP_IS_1) {;}
-		getrxdata((uint8_t *)buf, HDR_LEN);
-	}
-
-	/* re-enable interrupt after next byte arrived */
-	/* while(!FIFO_IS_1) {;} */
-
-	CC2420_CLEAR_FIFO_INT();
-
-	if(jam_ena && decision(count, len, (uint8_t *)buf) > 0) {
-		send_jam();
+	if(CC2420_FIFOP_IS_1) {
 		flushrx();
-		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %hu !", count, clock_seconds(), len);
- 	} else {
-		/* read remaining payload bytes */
-		while(CC2420_SFD_IS_1) {;} // wait until reception finishes
-		/* if(!called) { */
-		if(len != 5) {
-			FASTSPI_READ_FIFO_GARBAGE(len - HDR_LEN);
-		} else {
-			FASTSPI_READ_FIFO_GARBAGE(len);
-		}
-		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %hu", count, clock_seconds(), len);
-		if(P1IFG & BV(CC2420_FIFOP_PIN)) {
-			CC2420_CLEAR_FIFOP_INT();
-		}
-	}
-	process_post(&cc2420_debug_process, PROCESS_EVENT_MSG, info_str[info_str_index]);
-	info_str_index = (info_str_index + 1) % INFO_STR_NUM;
-	leds_off(LEDS_RED);
-	++count;
-	if(CC2420_FIFO_IS_1) {
-		cc2420_fifo_interrupt(1);
+		CC2420_CLEAR_FIFOP_INT();
 	}
 	return 1;
+	
+#endif
 }
+
 /*---------------------------------------------------------------------------*/
 /*
  * Unbuffered RX mode using FIFOP as clock input for serial data
@@ -851,47 +812,45 @@ cc2420_fifo_interrupt(int called)
 int
 cc2420_fifop_interrupt(void)
 {
-	/* unsigned bit = 0; */
-	/* if(CC2420_FIFO_IS_1) {++bit;} */
-	/* static unsigned nbits = 0; */
-	/* static uint8_t byte; */
-	/* static unsigned nbytes; */
-	/* static unsigned len; */
-	/* static uint8_t buf[20]; */
-	/* static char str[10]; */
+	/* static uint8_t octet = 0x5A; */
+	/* static uint bit_n = 0; */
+#define NUM_BITS 8;
+
+	static int bit = NUM_BITS;
 
 /* Debug toggle GIO pin */
-	/* GIO_PxOUT |= GIO2_BV; */
-  CC2420_CLEAR_FIFOP_INT();
-	/* GIO_PxOUT &= ~GIO2_BV; */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
 
-	/* LSB first */
-	/* if(CC2420_FIFO_IS_1) { */
-	/* if(bit) { */
-	/* 	byte |= 1<<nbits; */
+  CC2420_CLEAR_FIFOP_INT();
+
+	if (--bit==0) {
+			strobe(CC2420_SRXON);
+			bit = NUM_BITS;
+			CC2420_DISABLE_FIFOP_INT();
+			CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+	}
+
+	/* if (mode == SERIAL_JAM) { */
+		/* bit = octet & (1 << bit_n); */
+		/* if (bit == 0) { */
+		/* 	CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
+		/* 	bit++; */
+		/* } else if (bit == 1) { */
+		/* 	CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN); */
+		/* 	bit++; */
+		/* } else { */
+		/* 	CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
+		/* 	bit = 0; */
+		/* 	strobe(CC2420_SRXON); */
+		/* 	CC2420_DISABLE_FIFOP_INT(); */
+		/* } */
+
+		/* bit_n = (bit_n + 1) % 8; // wrap around octet from bit 0 in case of overflow */
 	/* } */
-	/* /\* first byte *\/ */
-	/* if(++nbits % 8 == 0) { */
-	/* 	/\* buf[nbytes++] = byte; *\/ */
-	/* 	nbits = 0; */
-	/* 	nbytes++; */
-	/* 	snprintf(str, sizeof(str), "%02x", byte); */
-	/* 	process_post(&cc2420_debug_process, PROCESS_EVENT_MSG, str); */
-	/* 	if(nbytes == 1) { */
-	/* 		len = byte; */
-	/* 	} else if (nbytes == len) { */
-	/* 		nbytes = 0; */
-	/* 		nbits = 0; */
-	/* 		strobe(CC2420_SRXON); */
-	/* 	} */
-	/* 	byte = 0; */
-	/* 	leds_toggle(LEDS_RED); */
-	/* } */
-	/* if(++nbits >= 56) { */
-	/* 	strobe(CC2420_SRXON); */
-	/* 	leds_toggle(LEDS_RED); */
-	/* 	nbits = 0; */
-	/* } */
+
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+
 
   return 1;
 }
@@ -908,9 +867,9 @@ int
 cc2420_interrupt(void)
 {
   CC2420_CLEAR_FIFOP_INT();
-	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
-	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
-	/* CLEAR_CCA_INT(); */
+	/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
+	/* GPIO2_PORT(OUT) |= BV(GPIO2_PIN); */
+	/* CC2420_CLEAR_CCA_INT(); */
 
 	process_poll(&cc2420_process);
 
@@ -923,7 +882,7 @@ cc2420_interrupt(void)
   pending++;
   cc2420_packets_seen++;
 
-	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
 
   return 1;
 }

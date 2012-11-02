@@ -46,7 +46,7 @@
 #endif
 
 extern rtimer_clock_t cc2420_interrupt_time;
-enum modes {RX, TX, SNIFF, JAM, MOD, UNMOD, CH};
+enum modes {RX, JAM, TX, SNIFF, SERIAL_JAM, MOD, UNMOD, CH};
 extern enum modes mode;
 /*---------------------------------------------------------------------------*/
 #if CONTIKI_TARGET_Z1
@@ -65,41 +65,34 @@ ISR(CC2420_IRQ, cc2420_port1_interrupt)
 ISR(CC2420_IRQ, cc2420_port1_interrupt)
 #endif
 {
-	/* Toggle test pin */
-	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
-	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
-	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
-
 	/* indicates packet size has exceeded RXFIFO threshold or packet reception has ended */
-	if(CC2420_FIFOP_IS_1) {
-#if ENABLE_UNBUFFERED_MODE
-		if(mode == SNIFF) {
+	if(!!(CC2420_FIFOP_PORT(IFG) & BV(CC2420_FIFOP_PIN))) {
+		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+		GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
+		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+		if(mode == SERIAL_JAM) {
 			if(cc2420_fifop_interrupt()) {
 				RETURN;
 			}
 		} else if (cc2420_interrupt()) {
 				RETURN;
 		}
-#else
-		if(cc2420_interrupt()) {
-			RETURN;
-		}
-#endif
 	}
-#if ENABLE_CCA_INTERRUPT
+/* #if ENABLE_CCA_INTERRUPT */
 	/* CCA flag on while FIFOP flag off: packet header just arrived */
-	else if(CC2420_CCA_PORT(IFG) & BV(CC2420_CCA_PIN)) {
+	else if(!!(CC2420_CCA_PORT(IFG) & BV(CC2420_CCA_PIN))) {
+		GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+		GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
+		GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
 		if(cc2420_cca_interrupt()) {
 			RETURN;
 		}
 	}
-#elif ENABLE_FIFO_INTERRUPT
-	else if(CC2420_FIFO_IS_1) {
-		if(cc2420_fifo_interrupt(0)) {
-			RETURN;
-		}
-	}
-#endif
+/* #endif */
+	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
+	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
+	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 	RETURN;
 }
 /*---------------------------------------------------------------------------*/

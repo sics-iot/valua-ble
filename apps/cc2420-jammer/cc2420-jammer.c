@@ -63,6 +63,15 @@
 #define CHANNEL 16
 #define DEFAULT_TXPOWER_LEVEL 27
 
+#define RX_MODE_BV (3<<0)
+#define RX_MODE_1 (1<<0)
+#define RX_MODE_2 (2<<0)
+#define RX_MODE_3 (3<<0)
+#define TX_MODE_BV (3<<2)
+#define TX_MODE_1 (1<<2) // Tx mode 1: serial mode
+#define TX_MODE_2 (2<<2)
+#define TX_MODE_3 (3<<2)
+
 #define BUSYWAIT_UNTIL(cond, max_time)                                  \
   do {                                                                  \
     rtimer_clock_t t0;                                                  \
@@ -74,10 +83,10 @@ extern int jam_ena;
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 
-enum modes {RX, JAM, TX, SNIFF, MOD, UNMOD, CH};
+enum modes {RX, JAM, TX, SNIFF, SERIAL_JAM, MOD, UNMOD, CH};
 
 enum modes mode;
-#define NUM_MODES 7
+#define NUM_MODES 8
 
 const enum modes INITIAL_MODE = RX;
 
@@ -136,13 +145,8 @@ reset_transmitter(void)
   unsigned reg;
 
   /* set normal TX mode 0, normal RX mode 0 */
-#define TX_MODE_BV (3<<2);
-#define RX_MODE_BV (3<<0);
-#define RX_MODE_1 (1<<0);
   reg = getreg(CC2420_MDMCTRL1);
-	reg &= ~TX_MODE_BV;
-	reg &= ~RX_MODE_BV;
-	/* reg |= RX_MODE_1; // test: set rx mode to unbuffered mode */
+	reg &= ~(TX_MODE_BV & RX_MODE_BV);
   setreg(CC2420_MDMCTRL1, reg);
 	printf("0x%04x\n", reg);
 
@@ -176,13 +180,12 @@ send_carrier(int mode)
 static void
 start_mode(enum modes to)
 {
-	/* unsigned reg; */
+	unsigned reg;
 	if(mode == JAM) {
 		jam_ena = 0;
 		CC2420_DISABLE_CCA_INT();
 		CC2420_CLEAR_CCA_INT();
-	} else if(mode == TX || mode == MOD || mode == UNMOD) {
-	/* } else if(mode == TX) { */
+	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == SERIAL_JAM) {
 		reset_transmitter();
 	}
   mode = to;
@@ -219,11 +222,11 @@ start_mode(enum modes to)
 #if ENABLE_CCA_INTERRUPT
 		CC2420_CLEAR_CCA_INT();
 		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
-#elif ENABLE_FIFO_INTERRUPT
-		ENABLE_FIFO_INT(); // enable cc2420 "packet header detected" interrupt
 #endif
 		jam_ena = 1;
 		printf("Jam mode\n");
+		printf("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
+		printf("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
 		break;
 	case SNIFF:
 		printf("Sniff mode\n");
@@ -233,19 +236,36 @@ start_mode(enum modes to)
 #if ENABLE_CCA_INTERRUPT
 		CC2420_CLEAR_CCA_INT();
 		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
-#elif ENABLE_FIFO_INTERRUPT
-		ENABLE_FIFO_INT(); // enable cc2420 "packet header detected" interrupt
 #elif ENABLE_UNBUFFERED_MODE
-#define RX_MODE_BV (3<<0);
-#define RX_MODE_1 (1<<0);
-#define RX_MODE_2 (2<<0);
-#define RX_MODE_3 (3<<0);
 		reg = getreg(CC2420_MDMCTRL1);
 		reg &= ~RX_MODE_BV;
 		reg |= RX_MODE_1;
 		setreg(CC2420_MDMCTRL1, reg);
-		ENABLE_FIFOP_INT();
+		CC2420_ENABLE_FIFOP_INT();
 #endif
+		break;
+	case SERIAL_JAM:
+		/* Periodic tx */
+    printf("Serial jamming mode\n");
+		// Test: CCA interrupt might cause extra delay
+		/* CC2420_DISABLE_CCA_INT(); */
+		/* CC2420_CLEAR_CCA_INT(); */
+
+		/* Set FIFO pin as serial data output */
+		CC2420_FIFO_PORT(DIR) |= BV(CC2420_FIFO_PIN);
+		/* Set FIFOP pin to falling edge interrupt  */
+		CC2420_FIFOP_PORT(IES) |= BV(CC2420_FIFOP_PIN);
+		CC2420_CLEAR_FIFOP_INT();
+				
+				 //, by enabling TX mode 1 and FIFOP interrupt*/
+		reg = getreg(CC2420_MDMCTRL1);
+		reg &= ~(TX_MODE_BV & RX_MODE_BV);
+		reg |= TX_MODE_1 | RX_MODE_1;
+		setreg(CC2420_MDMCTRL1, reg);
+		reg = getreg(CC2420_MDMCTRL1);
+		printf("MDMCTRL1 = 0x%04x\n", reg);
+
+		etimer_set(&et, CLOCK_SECOND / 8);
 		break;
   default:;
   }
@@ -256,7 +276,7 @@ start_mode(enum modes to)
 /* static const uint8_t *rxbuf_ptr = (uint8_t *)rxbuf; */
 
 #define MAX_TX_PACKETS 100
-#define MAX_PHY_LEN 3
+#define MAX_PHY_LEN 30
 void
 cc2420_set_receiver(void (*f)(const struct radio_driver *));
 /*---------------------------------------------------------------------------*/
@@ -285,10 +305,11 @@ PROCESS_THREAD(test_process, ev, data)
 	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
 	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 
-  /* cc2420_set_channel(CHANNEL); */
+	/* Change channel */
+  cc2420_set_channel(CHANNEL);
 	/* cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL); */
 
-	etimer_set(&et, CLOCK_SECOND *5);
+	etimer_set(&et, CLOCK_SECOND *1);
 	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
   printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
@@ -310,7 +331,6 @@ PROCESS_THREAD(test_process, ev, data)
 	printf("MDMCTRL0 = 0x%04x\n", reg);
 	reg = getreg(CC2420_MDMCTRL1);
 	printf("MDMCTRL1 = 0x%04x\n", reg);
-
 
   while(1) {
     PROCESS_WAIT_EVENT();
@@ -348,7 +368,15 @@ PROCESS_THREAD(test_process, ev, data)
 					clock_delay(200);
 					leds_off(LEDS_BLUE);
 				}
-      }
+      } else if(mode == SERIAL_JAM) {
+				/* Test: set FIFO = 0 */
+				CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+				CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
+				/* Start serial data transmission */
+				CC2420_CLEAR_FIFOP_INT();
+				CC2420_ENABLE_FIFOP_INT();
+				strobe(CC2420_STXON);
+			}
     } else if(ev == serial_line_event_message) {
       char ch = *(char *)data;
       if(ch == '\0') {
