@@ -809,50 +809,62 @@ cc2420_cca_interrupt(void)
 /*
  * Unbuffered RX mode using FIFOP as clock input for serial data
  */
-int
+void
 cc2420_fifop_interrupt(void)
 {
-	/* static uint8_t octet = 0x5A; */
-	/* static uint bit_n = 0; */
-#define NUM_BITS 8;
+	/* static uint8_t octet = (0xA5>>1); */
+#define NUM_BITS 7
 
 	static int bit = NUM_BITS;
+	/* static int this_bit; */
 
 /* Debug toggle GIO pin */
-	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
-	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
 
   CC2420_CLEAR_FIFOP_INT();
-
-	if (--bit==0) {
-			strobe(CC2420_SRXON);
+	
+	if (bit==0) {
 			bit = NUM_BITS;
 			CC2420_DISABLE_FIFOP_INT();
+			CC2420_CLEAR_FIFOP_INT();
 			CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+	/* some delay needed to ensure the last few bits get transmitted before transmitter shuts down */
+			clock_delay(62); // TODO: replace magic number with F_CPU-dependent formula
+			strobe(CC2420_SRXON);
+	} else {
+		if (bit==1) {
+		CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+		} else {
+		CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
+		}
+		--bit;
 	}
 
+	// send predifiend len byte
 	/* if (mode == SERIAL_JAM) { */
-		/* bit = octet & (1 << bit_n); */
-		/* if (bit == 0) { */
-		/* 	CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
-		/* 	bit++; */
-		/* } else if (bit == 1) { */
-		/* 	CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN); */
-		/* 	bit++; */
-		/* } else { */
-		/* 	CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
-		/* 	bit = 0; */
-		/* 	strobe(CC2420_SRXON); */
-		/* 	CC2420_DISABLE_FIFOP_INT(); */
-		/* } */
-
-		/* bit_n = (bit_n + 1) % 8; // wrap around octet from bit 0 in case of overflow */
+	/* if (bit==NUM_BITS) { */
+	/* 		bit = 0; */
+	/* 		octet = (0xA5>>1); */
+	/* 		CC2420_DISABLE_FIFOP_INT(); */
+	/* 		CC2420_CLEAR_FIFOP_INT(); */
+	/* 		CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN); */
+	/* 		clock_delay(300); */
+	/* 		strobe(CC2420_SRXON); */
+	/* } else { */
+	/* 	if (this_bit) { */
+	/* 		CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
+	/* 	} else { */
+	/* 	CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN); */
+	/* 	} */
+	/* 	++bit; */
 	/* } */
+	/* } */
+	/* this_bit = octet & 0x01; */
+	/* octet>>=1; */
 
-	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
 
-
-  return 1;
+  return;
 }
 /*---------------------------------------------------------------------------*/
 /*

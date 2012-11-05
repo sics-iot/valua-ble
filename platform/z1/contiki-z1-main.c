@@ -444,7 +444,7 @@ main(int argc, char **argv)
     if(process_nevents() != 0 || uart0_active()) {
       splx(s);			/* Re-enable interrupts. */
     } else {
-      static unsigned long irq_energest = 0;
+      /* static unsigned long irq_energest = 0; */
 
 #if DCOSYNCH_CONF_ENABLED
       /* before going down to sleep possibly do some management */
@@ -460,9 +460,13 @@ main(int argc, char **argv)
       /* We only want to measure the processing done in IRQs when we
 	 are asleep, so we discard the processing time done when we
 	 were awake. */
-      energest_type_set(ENERGEST_TYPE_IRQ, irq_energest);
-      watchdog_stop();
-      _BIS_SR(GIE | SCG0 | SCG1 | CPUOFF); /* LPM3 sleep. This
+      /* energest_type_set(ENERGEST_TYPE_IRQ, irq_energest); */
+      /* watchdog_stop(); */
+			// Zhitao: test non-sleep
+      _BIS_SR(GIE);
+
+      /* _BIS_SR(GIE | SCG0 | SCG1 | CPUOFF); */
+			/* LPM3 sleep. This
 					      statement will block
 					      until the CPU is
 					      woken up by an
@@ -471,10 +475,10 @@ main(int argc, char **argv)
 
       /* We get the current processing time for interrupts that was
 	 done during the LPM and store it for next time around.  */
-      dint();
-      irq_energest = energest_type_time(ENERGEST_TYPE_IRQ);
-      eint();
-      watchdog_start();
+      /* dint(); */
+      /* irq_energest = energest_type_time(ENERGEST_TYPE_IRQ); */
+      /* eint(); */
+      /* watchdog_start(); */
       ENERGEST_OFF(ENERGEST_TYPE_LPM);
       ENERGEST_ON(ENERGEST_TYPE_CPU);
     }

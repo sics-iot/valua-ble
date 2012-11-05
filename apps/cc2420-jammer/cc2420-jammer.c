@@ -248,13 +248,15 @@ start_mode(enum modes to)
 		/* Periodic tx */
     printf("Serial jamming mode\n");
 		// Test: CCA interrupt might cause extra delay
-		/* CC2420_DISABLE_CCA_INT(); */
-		/* CC2420_CLEAR_CCA_INT(); */
+		CC2420_DISABLE_CCA_INT();
+		CC2420_CLEAR_CCA_INT();
 
 		/* Set FIFO pin as serial data output */
 		CC2420_FIFO_PORT(DIR) |= BV(CC2420_FIFO_PIN);
-		/* Set FIFOP pin to falling edge interrupt  */
-		CC2420_FIFOP_PORT(IES) |= BV(CC2420_FIFOP_PIN);
+		/* /\* Set FIFOP pin to falling edge interrupt  *\/ */
+		/* CC2420_FIFOP_PORT(IES) |= BV(CC2420_FIFOP_PIN); */
+		/* Set FIFOP pin to rising edge interrupt  */
+		CC2420_FIFOP_PORT(IES) &= ~BV(CC2420_FIFOP_PIN);
 		CC2420_CLEAR_FIFOP_INT();
 				
 				 //, by enabling TX mode 1 and FIFOP interrupt*/
@@ -265,7 +267,7 @@ start_mode(enum modes to)
 		reg = getreg(CC2420_MDMCTRL1);
 		printf("MDMCTRL1 = 0x%04x\n", reg);
 
-		etimer_set(&et, CLOCK_SECOND / 8);
+		etimer_set(&et, CLOCK_SECOND / 10);
 		break;
   default:;
   }
@@ -369,8 +371,7 @@ PROCESS_THREAD(test_process, ev, data)
 					leds_off(LEDS_BLUE);
 				}
       } else if(mode == SERIAL_JAM) {
-				/* Test: set FIFO = 0 */
-				CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+				/* Test: set first transmitted bit = 1 */
 				CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
 				/* Start serial data transmission */
 				CC2420_CLEAR_FIFOP_INT();

@@ -385,9 +385,13 @@ ISR(PORT1, port1_isr)
   /* ADXL345_IFG.x goes high when interrupt occurs, use to check what interrupted */
 	/* if(!!(ADXL345_IFG & BV(CC2420_FIFOP_PIN))) { */
 	  // Zhitao: jump to my customized CC2420 ISR
+#if ENABLE_UNBUFFERED_MODE
+	cc2420_fifop_interrupt();
+#else
 	  if(cc2420_port1_interrupt()) {
 		  LPM4_EXIT;
 	  }
+#endif
 	/* } else */
   /* if ((ADXL345_IFG & ADXL345_INT1_PIN) && !(ADXL345_IFG & BV(CC2420_FIFOP_PIN))){ */
   /*   /\* Check if this should be suppressed or not *\/ */

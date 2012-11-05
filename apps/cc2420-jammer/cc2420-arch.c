@@ -67,9 +67,9 @@ ISR(CC2420_IRQ, cc2420_port1_interrupt)
 {
 	/* indicates packet size has exceeded RXFIFO threshold or packet reception has ended */
 	if(!!(CC2420_FIFOP_PORT(IFG) & BV(CC2420_FIFOP_PIN))) {
-		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
-		GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
-		GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+		/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
+		/* GPIO2_PORT(OUT) |= BV(GPIO2_PIN); */
+		/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
 		if(mode == SERIAL_JAM) {
 			if(cc2420_fifop_interrupt()) {
 				RETURN;
@@ -81,18 +81,18 @@ ISR(CC2420_IRQ, cc2420_port1_interrupt)
 /* #if ENABLE_CCA_INTERRUPT */
 	/* CCA flag on while FIFOP flag off: packet header just arrived */
 	else if(!!(CC2420_CCA_PORT(IFG) & BV(CC2420_CCA_PIN))) {
-		GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
-		GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
-		GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+		/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+		/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+		/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
 		if(cc2420_cca_interrupt()) {
 			RETURN;
 		}
 	}
 /* #endif */
-	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
-	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
-	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
-	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+	/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
+	/* GPIO2_PORT(OUT) |= BV(GPIO2_PIN); */
+	/* GPIO2_PORT(OUT) |= BV(GPIO2_PIN); */
+	/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
 	RETURN;
 }
 /*---------------------------------------------------------------------------*/
