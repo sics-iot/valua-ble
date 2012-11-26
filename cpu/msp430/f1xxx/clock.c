@@ -149,6 +149,10 @@ clock_init(void)
   TACTL = TASSEL0 | TACLR;
 #elif INTERVAL==16384/CLOCK_SECOND
   TACTL = TASSEL0 | TACLR | ID_1;
+#elif INTERVAL==8192/CLOCK_SECOND
+  TACTL = TASSEL0 | TACLR | ID_2;
+#elif INTERVAL==4096/CLOCK_SECOND
+  TACTL = TASSEL0 | TACLR | ID_3;
 #else
 #error NEED TO UPDATE clock.c to match interval!
 #endif

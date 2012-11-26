@@ -83,7 +83,7 @@ extern int jam_ena;
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 
-enum modes {RX, JAM, TX, SNIFF, SERIAL_JAM, MOD, UNMOD, CH};
+enum modes {RX, SERIAL_JAM, TX, JAM, SNIFF, MOD, UNMOD, CH};
 
 enum modes mode;
 #define NUM_MODES 8
@@ -95,6 +95,8 @@ static struct etimer et;
 /* static unsigned time_send; */
 
 static uint16_t seqno;
+
+struct rtimer rt;
 
 PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
@@ -136,6 +138,22 @@ flushrx(void)
   CC2420_READ_FIFO_BYTE(dummy);
   CC2420_STROBE(CC2420_SFLUSHRX);
   CC2420_STROBE(CC2420_SFLUSHRX);
+}
+/*---------------------------------------------------------------------------*/
+void
+send_len(struct rtimer *t, void *ptr)
+{
+	/* schedule next send */
+	if (ptr) {
+		rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 64, 0, send_len, (void *)1);
+		
+		/* Test: set first transmitted bit = 1 */
+		CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
+		/* Start serial data transmission */
+		CC2420_CLEAR_FIFOP_INT();
+		CC2420_ENABLE_FIFOP_INT();
+		strobe(CC2420_STXON);
+	}
 }
 /*---------------------------------------------------------------------------*/
 /* Reset transmitter to normal packet mode */
@@ -187,6 +205,8 @@ start_mode(enum modes to)
 		CC2420_CLEAR_CCA_INT();
 	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == SERIAL_JAM) {
 		reset_transmitter();
+		// stop rtimer
+		rt.ptr = NULL;
 	}
   mode = to;
   switch(mode) {
@@ -267,7 +287,8 @@ start_mode(enum modes to)
 		reg = getreg(CC2420_MDMCTRL1);
 		printf("MDMCTRL1 = 0x%04x\n", reg);
 
-		etimer_set(&et, CLOCK_SECOND / 10);
+		/* etimer_set(&et, CLOCK_SECOND / 128); */
+		rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 128, 0, send_len, (void *)1);
 		break;
   default:;
   }
@@ -450,3 +471,4 @@ decision(long int n, uint8_t len, uint8_t *buf)
 	/* } */
 	/* return 0; */
 }
+

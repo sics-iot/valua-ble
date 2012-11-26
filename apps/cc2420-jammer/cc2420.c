@@ -310,11 +310,11 @@ cc2420_init(void)
 
   /* Turn on voltage regulator and reset. */
   SET_VREG_ACTIVE();
-  clock_delay(250*4);
+  clock_delay(250*(F_CPU/(4000000uL)));
   SET_RESET_ACTIVE();
-  clock_delay(127*4);
+  clock_delay(127*(F_CPU/(4000000uL)));
   SET_RESET_INACTIVE();
-  clock_delay(125*4);
+  clock_delay(125*(F_CPU/(4000000uL)));
 
 
   /* Turn on the crystal oscillator. */
@@ -829,8 +829,10 @@ cc2420_fifop_interrupt(void)
 			CC2420_CLEAR_FIFOP_INT();
 			CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
 	/* some delay needed to ensure the last few bits get transmitted before transmitter shuts down */
-			clock_delay(62); // TODO: replace magic number with F_CPU-dependent formula
-			strobe(CC2420_SRXON);
+			clock_delay(16); // TODO: replace magic number with F_CPU-dependent formula
+			/* strobe(CC2420_SRXON); */
+			strobe(CC2420_SRFOFF);
+			/* CC2420_DISABLE_FIFOP_INT(); */
 	} else {
 		if (bit==1) {
 		CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
