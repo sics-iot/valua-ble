@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, Swedish Institute of Computer Science
+ * Copyright (c) 2011, George Oikonomou - <oikonomou@users.sourceforge.net>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,7 +14,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
@@ -28,24 +28,44 @@
  *
  * This file is part of the Contiki operating system.
  */
-#ifndef __MTARCH_H__
-#define __MTARCH_H__
 
+/**
+ * \file
+ *         8051 stack debugging facilities
+ *
+ * \author
+ *         George Oikonomou - <oikonomou@users.sourceforge.net>
+ *         Philippe Retornaz (EPFL)
+ */
 #include "contiki.h"
 
-#ifndef MTARCH_STACKSIZE
-#define MTARCH_STACKSIZE 128
-#endif /* MTARCH_STACKSIZE */
+#ifndef STACK_POISON
+#define STACK_POISON 0xAA
+#endif
 
-struct mtarch_thread {
-  unsigned short stack[MTARCH_STACKSIZE];
-  unsigned short *sp;
-  void *data;
-  void (* function)(void *);
-};
+CC_AT_DATA uint8_t sp;
 
-struct mt_thread;
+void
+stack_poison(void)
+{
+  __asm
+  mov r1, _SP
+poison_loop:
+  inc r1
+  mov @r1, #STACK_POISON
+  cjne r1, #0xFF, poison_loop
+  __endasm;
+}
 
-int mtarch_stack_usage(struct mt_thread *t);
+uint8_t
+stack_get_max(void)
+{
+  __data uint8_t * sp = (__data uint8_t *) 0xff;
+  uint8_t free = 0;
 
-#endif /* __MTARCH_H__ */
+  while(*sp-- == STACK_POISON) {
+    free++;
+  }
+
+  return 0xff - free;
+}

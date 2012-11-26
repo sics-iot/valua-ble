@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, Swedish Institute of Computer Science
+ * Copyright (c) 2011, George Oikonomou - <oikonomou@users.sourceforge.net>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,7 +14,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
@@ -28,24 +28,41 @@
  *
  * This file is part of the Contiki operating system.
  */
-#ifndef __MTARCH_H__
-#define __MTARCH_H__
 
-#include "contiki.h"
+/**
+ * \file
+ *         Header file for 8051 stack debugging facilities
+ *
+ * \author
+ *         George Oikonomou - <oikonomou@users.sourceforge.net>
+ *         Philippe Retornaz (EPFL)
+ */
+#ifndef STACK_H_
+#define STACK_H_
 
-#ifndef MTARCH_STACKSIZE
-#define MTARCH_STACKSIZE 128
-#endif /* MTARCH_STACKSIZE */
+#if STACK_CONF_DEBUGGING
+extern CC_AT_DATA uint8_t sp;
 
-struct mtarch_thread {
-  unsigned short stack[MTARCH_STACKSIZE];
-  unsigned short *sp;
-  void *data;
-  void (* function)(void *);
-};
+#define stack_dump(f) do { \
+  putstring(f); \
+  sp = SP; \
+  puthex(sp); \
+  putchar('\n'); \
+} while(0)
 
-struct mt_thread;
+#define stack_max_sp_print(f) do { \
+  putstring(f); \
+  puthex(stack_get_max()); \
+  putchar('\n'); \
+} while(0)
 
-int mtarch_stack_usage(struct mt_thread *t);
+void stack_poison(void);
+uint8_t stack_get_max(void);
+#else
+#define stack_dump(...)
+#define stack_max_sp_print(...)
+#define stack_poison()
+#define stack_get_max()
+#endif
 
-#endif /* __MTARCH_H__ */
+#endif /* STACK_H_ */
