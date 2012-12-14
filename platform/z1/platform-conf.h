@@ -104,13 +104,6 @@ typedef unsigned long off_t;
 #define LEDS_CONF_GREEN  0x40
 #define LEDS_CONF_YELLOW 0x20
 
-
-/* GPIO ports */
-#define GPIO1_PORT(type)   P1##type
-#define GPIO1_PIN          0
-#define GPIO2_PORT(type)   P2##type
-#define GPIO2_PIN          1
-
 /* DCO speed resynchronization for more robust UART, etc. */
 #define DCOSYNCH_CONF_ENABLED 0
 #define DCOSYNCH_CONF_PERIOD 30
@@ -171,8 +164,7 @@ typedef unsigned long off_t;
  * SPI bus - CC2420 pin configuration.
  */
 
-/* #define CC2420_CONF_SYMBOL_LOOP_COUNT 1302	/\* 326us msp430X @ 8MHz *\/ */
-#define CC2420_CONF_SYMBOL_LOOP_COUNT 2604	/* 326us msp430X @ 16MHz */
+#define CC2420_CONF_SYMBOL_LOOP_COUNT 1302	/* 326us msp430X @ 8MHz */
 
 /* P1.2 - Input: FIFOP from CC2420 */
 #define CC2420_FIFOP_PORT(type)   P1##type
@@ -223,10 +215,6 @@ typedef unsigned long off_t;
 #define CC2420_ENABLE_FIFOP_INT()  do {CC2420_FIFOP_PORT(IE) |= BV(CC2420_FIFOP_PIN);} while(0)
 #define CC2420_DISABLE_FIFOP_INT() do {CC2420_FIFOP_PORT(IE) &= ~BV(CC2420_FIFOP_PIN);} while(0)
 #define CC2420_CLEAR_FIFOP_INT()   do {CC2420_FIFOP_PORT(IFG) &= ~BV(CC2420_FIFOP_PIN);} while(0)
-
-#define CC2420_ENABLE_CCA_INT()  do {CC2420_CCA_PORT(IE) |= BV(CC2420_CCA_PIN);} while(0)
-#define CC2420_DISABLE_CCA_INT() do {CC2420_CCA_PORT(IE) &= ~BV(CC2420_CCA_PIN);} while(0)
-#define CC2420_CLEAR_CCA_INT()   do {CC2420_CCA_PORT(IFG) &= ~BV(CC2420_CCA_PIN);} while(0)
 
 /*
  * Enables/disables CC2420 access to the SPI bus (not the bus).

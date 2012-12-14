@@ -69,12 +69,10 @@
 #define NETSTACK_CONF_NETWORK rime_driver
 #define NETSTACK_CONF_MAC     csma_driver
 #define NETSTACK_CONF_RDC     contikimac_driver
-/* #define NETSTACK_CONF_MAC     nullmac_driver */
-/* #define NETSTACK_CONF_RDC     rawrdc_driver */
 #define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE 8
 #define NETSTACK_CONF_FRAMER  framer_802154
 
-/* #define CC2420_CONF_AUTOACK              1 */
+#define CC2420_CONF_AUTOACK              1
 
 #define COLLECT_CONF_ANNOUNCEMENTS       1
 #define RIME_CONF_NO_POLITE_ANNOUCEMENTS 0
@@ -82,9 +80,9 @@
 #define XMAC_CONF_ANNOUNCEMENTS          0
 #define CONTIKIMAC_CONF_ANNOUNCEMENTS    0
 
-/* #define CONTIKIMAC_CONF_COMPOWER         1 */
-/* #define XMAC_CONF_COMPOWER               1 */
-/* #define CXMAC_CONF_COMPOWER              1 */
+#define CONTIKIMAC_CONF_COMPOWER         1
+#define XMAC_CONF_COMPOWER               1
+#define CXMAC_CONF_COMPOWER              1
 
 #define COLLECT_NEIGHBOR_CONF_MAX_NEIGHBORS      32
 
@@ -107,7 +105,7 @@
 #define CFS_CONF_OFFSET_TYPE	long
 
 #define PROFILE_CONF_ON 0
-#define ENERGEST_CONF_ON 0
+#define ENERGEST_CONF_ON 1
 
 #define ELFLOADER_CONF_TEXT_IN_ROM 0
 #define ELFLOADER_CONF_DATAMEMORY_SIZE 0x400
