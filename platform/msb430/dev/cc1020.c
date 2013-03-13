@@ -53,7 +53,7 @@
 #include "sys/energest.h"
 #include "isr_compat.h"
 
-#define DEBUG 0
+#define DEBUG  0
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -69,15 +69,16 @@ static int cc1020_setupRX(int);
 static void cc1020_setupPD(void);
 static void cc1020_wakeupTX(int);
 static void cc1020_wakeupRX(int);
-static uint8_t cc1020_read_reg(uint8_t addr);
-static void cc1020_write_reg(uint8_t addr, uint8_t adata);
+uint8_t cc1020_read_reg(uint8_t addr);
+void cc1020_write_reg(uint8_t addr, uint8_t adata);
 static void cc1020_load_config(const uint8_t *);
 static void cc1020_reset(void);
 
 static const uint8_t syncword[SYNCWORD_SIZE] = {0xD3, 0x91};
 
 /* current mode of cc1020 chip */
-static volatile enum cc1020_state cc1020_state = CC1020_OFF;
+/* static volatile enum cc1020_state cc1020_state = CC1020_OFF; */
+volatile enum cc1020_state cc1020_state = CC1020_OFF;
 static volatile uint8_t cc1020_rxbuf[HDR_SIZE + CC1020_BUFFERSIZE];
 static uint8_t cc1020_txbuf[PREAMBLE_SIZE + SYNCWORD_SIZE + HDR_SIZE +
 			   CC1020_BUFFERSIZE + TAIL_SIZE];
@@ -337,6 +338,8 @@ cc1020_read(void *buf, unsigned short size)
 {
   unsigned len;
 
+	PRINTF(".%d\n", cc1020_rxlen);
+
   if(cc1020_rxlen <= HDR_SIZE) {
     return 0;
   }
@@ -545,7 +548,7 @@ ISR(UART0RX, cc1020_rxhandler)
   } 
 }
 
-static void
+void
 cc1020_write_reg(uint8_t addr, uint8_t adata)
 {
   unsigned int i;
@@ -592,7 +595,7 @@ cc1020_write_reg(uint8_t addr, uint8_t adata)
   PSEL_OFF;
 }
 
-static uint8_t
+uint8_t
 cc1020_read_reg(uint8_t addr)
 {
   unsigned int i;
@@ -684,7 +687,8 @@ cc1020_calibrate(void)
   return (cc1020_read_reg(CC1020_STATUS) & LOCK_CONTINUOUS) == LOCK_CONTINUOUS;
 }
 
-static int
+/* static int */
+int
 cc1020_lock(void)
 {
   char lock_status;
@@ -801,3 +805,94 @@ cc1020_wakeupTX(int analog)
   cc1020_write_reg(CC1020_MAIN, 0xD1);
 }
 
+const uint8_t cc1020_config_19200[41] = {
+  0x01,   // 0x00, MAIN
+  0x0F,   // 0x01, INTERFACE
+  0xFF,   // 0x02, RESET
+  0x8F,   // 0x03, SEQUENCING
+  // 869.525 at 50kHz
+  0x3A,   // 0x04, FREQ_2A
+  0x32,   // 0x05, FREQ_1A
+  0x97,   // 0x06, FREQ_0A // 19200
+  0x38,   // 0x07, CLOCK_A // 19200
+  0x3A,   // 0x08, FREQ_2B
+  0x37,   // 0x09, FREQ_1B
+  0xEB,   // 0x0A, FREQ_0B // 19200
+  0x38,   // 0x0B, CLOCK_B // 19200
+  0x44,   // 0x0C, VCO     44
+  0x51,   // 0x0D, MODEM   Manchester
+  0x2B,   // 0x0E, DEVIATION // FSK
+  0x4C,   // 0x0F, AFC_CONTROL Ruetten 0xCC
+  0x25,   // 0x10, FILTER Bandwith 51.2 kHz i.e. channel spacing 100kHz
+  0x61,   // 0x11, VGA1
+  0x55,   // 0x12, VGA2
+  0x2D,   // 0x13, VGA3
+  0x37,   // 0x14, VGA4 // 0x29, VGA4 ADJUSTED CS to 23!
+  0x40,   // 0x15, LOCK is Carrier SENSE
+  0x76,   // 0x16, FRONTEND
+  0x87,   // 0x17, ANALOG, RX=86/TX=87
+  0x10,   // 0x18, BUFF_SWING
+  0x25,   // 0x19, BUFF_CURRENT
+  0xAE,   // 0x1A, PLL_BW
+  0x34,   // 0x1B, CALIBRATE
+  PA_POWER, // 0x1C, PA_POWER AN025 = 0xA0
+  0xF0,   // 0x1D, MATCH
+  0x00,   // 0x1E, PHASE_COMP
+  0x00,   // 0x1F, GAIN_COMP
+  0x00,   // 0x20, POWERDOWN
+  0x4d,   // 0x4d,  // 0x21,
+  0x10,   // 0x10,  // 0x22,
+  0x06,   // 0x06,  // 0x23,
+  0x00,   // 0x00,  // 0x24,
+  0x40,   // 0x40,  // 0x25,
+  0x00,   // 0x00,  // 0x26,
+  0x00,   // 0x00,   // 0x27,
+  // Not in real config of chipCon from here!!!
+  ACK_TIMEOUT_19
+};
+
+const uint8_t cc1020_config_115200[41] = {
+  0x01,   // 0x00, MAIN
+  0x0F,   // 0x01, INTERFACE
+  0xFF,   // 0x02, RESET
+  0x8F,   // 0x03, SEQUENCING
+  // 869.525 at 200kHz
+  0x3A,   // 0x04, FREQ_2A
+  0x32,   // 0x05, FREQ_1A
+  0x97,   // 0x06, FREQ_0A // 19200
+  0x29,   // 0x07, CLOCK_A // 19200
+  0x3A,   // 0x08, FREQ_2B
+  0x37,   // 0x09, FREQ_1B
+  0xEB,   // 0x0A, FREQ_0B // 19200
+  0x29,   // 0x0B, CLOCK_B // 19200
+  0x44,   // 0x0C, VCO 44
+  0x51,   // 0x0D, MODEM Manchester
+  0x58,   // 0x0E, DEVIATION // FSK
+  0x4C,   // 0x0F, AFC_CONTROL Ruetten 0xCC
+  0x80,   // 0x10, FILTER Bandwith 307.2kHz, i.e. channel spacing 500 kHz
+  0x61,   // 0x11, VGA1
+  0x57,   // 0x12, VGA2
+  0x30,   // 0x13, VGA3
+  0x35,   // 0x14, VGA4
+  0x20,   // 0x15, LOCK is Carrier SENSE
+  0x76,   // 0x16, FRONTEND
+  0x87,   // 0x17, ANALOG, RX=86/TX=87
+  0x10,   // 0x18, BUFF_SWING
+  0x25,   // 0x19, BUFF_CURRENT
+  0xAE,   // 0x1A, PLL_BW
+  0x34,   // 0x1B, CALIBRATE
+  PA_POWER, // 0x1C, PA_POWER AN025 = 0xA0
+  0xF0,   // 0x1D, MATCH
+  0x00,   // 0x1E, PHASE_COMP
+  0x00,   // 0x1F, GAIN_COMP
+  0x00,   // 0x20, POWERDOWN
+  0x4d,   // 0x21,
+  0x10,   // 0x22,
+  0x06,   // 0x23,
+  0x00,   // 0x24,
+  0x40,   // 0x25,
+  0x00,   // 0x26,
+  0x00,   // 0x27,             
+  // Not in real config of chipCon from here!!!
+  ACK_TIMEOUT_115
+};

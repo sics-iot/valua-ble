@@ -176,7 +176,7 @@ rm -f $(@:.o=.$$$$)
 endef
 
  clean:
-	rm -f *~ *core core *.srec \
+	rm -f *~ ?*core *.srec \
 	*.lst *.map \
 	*.cprg *.bin *.data contiki*.a *.firmware core-labels.S *.ihex *.ini \
 	*.ce *.co $(CLEAN)
