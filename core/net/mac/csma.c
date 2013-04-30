@@ -67,7 +67,7 @@
 #ifdef CSMA_CONF_MAX_MAC_TRANSMISSIONS
 #define CSMA_MAX_MAC_TRANSMISSIONS CSMA_CONF_MAX_MAC_TRANSMISSIONS
 #else
-#define CSMA_MAX_MAC_TRANSMISSIONS 3
+#define CSMA_MAX_MAC_TRANSMISSIONS 1
 #endif /* CSMA_CONF_MAX_MAC_TRANSMISSIONS */
 #endif /* CSMA_MAX_MAC_TRANSMISSIONS */
 
@@ -254,7 +254,7 @@ packet_sent(void *ptr, int status, int num_transmissions)
          transmitting this packet. */
       queuebuf_update_attr_from_packetbuf(q->buf);
     } else {
-      PRINTF("csma: drop with status %d after %d transmissions, %d collisions\n",
+      printf("csma: drop with status %d after %d transmissions, %d collisions\n",
              status, n->transmissions, n->collisions);
       free_first_packet(n);
       mac_call_sent_callback(sent, cptr, status, num_tx);
