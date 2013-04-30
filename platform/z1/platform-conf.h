@@ -47,7 +47,7 @@
 #define PLATFORM_HAS_BUTTON 1
 
 /* CPU target speed in Hz */
-#define F_CPU 16000000uL /* 8MHz by default */
+#define F_CPU 8000000uL /* 8MHz by default */
 //Enric #define F_CPU 3900000uL /*2457600uL*/
 
 /* Our clock resolution, this is the same as Unix HZ. */

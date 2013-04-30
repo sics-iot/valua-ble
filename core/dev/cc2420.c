@@ -243,7 +243,7 @@ static void RELEASE_LOCK(void) {
   locked--;
 }
 /*---------------------------------------------------------------------------*/
-static unsigned
+unsigned
 getreg(enum cc2420_register regname)
 {
   unsigned reg;
@@ -251,7 +251,7 @@ getreg(enum cc2420_register regname)
   return reg;
 }
 /*---------------------------------------------------------------------------*/
-static void
+void
 setreg(enum cc2420_register regname, unsigned value)
 {
   CC2420_WRITE_REG(regname, value);
