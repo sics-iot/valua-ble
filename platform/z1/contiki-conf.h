@@ -123,7 +123,7 @@
 
 #define UART0_CONF_TX_WITH_INTERRUPT 0 // So far, printfs without interrupt.
 
-#ifdef WITH_UIP6
+#if WITH_UIP6
 
 #define RIMEADDR_CONF_SIZE              8
 
@@ -166,6 +166,7 @@
 #else /* WITH_UIP6 */
 #define UIP_CONF_IP_FORWARD      1
 #define UIP_CONF_BUFFER_SIZE     108
+#define UIP_CONF_IPV6 0
 #endif /* WITH_UIP6 */
 
 #define UIP_CONF_ICMP_DEST_UNREACH 1
