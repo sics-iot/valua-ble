@@ -49,9 +49,12 @@
 #include "lib/random.h"
 #include "dev/radio.h"
 #include "dev/watchdog.h"
+#include "cc2420-jammer.h"
+#include "commands.h"
 
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #define DEBUG 1
 #if DEBUG
@@ -60,8 +63,37 @@
 #define PRINTF(...)
 #endif
 
-#define CHANNEL 16
-#define DEFAULT_TXPOWER_LEVEL 27
+// Field Vector (FV) generator macro based on user defined MSB and LSB
+#define FV(MSB, LSB) \
+	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
+
+// Field value (FVAL) generator macro
+#define FVAL(REGVAL, MSB, LSB) \
+	((REGVAL & FV(MSB, LSB)) >> LSB)
+
+// Set Field macro
+#define SETFD(REGVAL, FVAL, MSB, LSB) \
+	((REGVAL & ~FV(MSB, LSB)) | (FVAL << LSB))
+
+#define FDS(FVAL, LSB) \
+	((FVAL) << (LSB))
+
+// Set Fields
+#define SETFDS(REGVAL, FV, FDS)	\
+	((REGVAL & ~FV) | (FDS))
+
+#define BUSYWAIT_UNTIL(cond, max_time)                                  \
+  do {                                                                  \
+    rtimer_clock_t t0;                                                  \
+    t0 = RTIMER_NOW();                                                  \
+    while(!(cond) && RTIMER_CLOCK_LT(RTIMER_NOW(), t0 + (max_time)));   \
+  } while(0)
+
+#define CCAMUX_BV (31<<0)
+#define SFDMUX_BV (31<<5)
+
+#define CHANNEL 20
+#define DEFAULT_TXPOWER_LEVEL 23
 
 #define RX_MODE_BV (3<<0)
 #define RX_MODE_1 (1<<0)
@@ -72,87 +104,90 @@
 #define TX_MODE_2 (2<<2)
 #define TX_MODE_3 (3<<2)
 
-#define BUSYWAIT_UNTIL(cond, max_time)                                  \
-  do {                                                                  \
-    rtimer_clock_t t0;                                                  \
-    t0 = RTIMER_NOW();                                                  \
-    while(!(cond) && RTIMER_CLOCK_LT(RTIMER_NOW(), t0 + (max_time)));   \
-  } while(0)
+#define TX_INTERVAL (CLOCK_SECOND / 16)
+#define MAX_TX_PACKETS 10
+#define PAYLOAD_LEN 10
+
+#ifndef TX_INTERVAL
+#define TX_INTERVAL DEFAULT_TX_INTERVAL
+#endif
+#ifndef MAX_TX_PACKETS
+#define MAX_TX_PACKETS DEFAULT_MAX_TX_PACKETS
+#endif
+#ifndef PAYLOAD_LEN
+#define PAYLOAD_LEN DEFAULT_PAYLOAD_LEN
+#endif
 
 extern int jam_ena;
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
+uint16_t seqno;
+static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7};
+static uint8_t txfifo_data[128];
 
-enum modes {RX, SERIAL_JAM, TX, JAM, SNIFF, MOD, UNMOD, CH};
-
-enum modes mode;
-#define NUM_MODES 8
-
-const enum modes INITIAL_MODE = RX;
-
-static struct etimer et;
-
-/* static unsigned time_send; */
-
-static uint16_t seqno;
-
-struct rtimer rt;
+void
+do_command(char ch);
 
 PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
 
 /*---------------------------------------------------------------------------*/
-static unsigned
-getreg(enum cc2420_register regname)
+void pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_src)(void))
 {
-  unsigned reg;
-  CC2420_READ_REG(regname, reg);
-  return reg;
+	int i;
+	for(i = 0;i < dst_len - dst_len % src_len;i+=src_len) {
+		memcpy(dst+i, src, src_len);
+		if(update_src) {
+			update_src();
+		}
+	}
+	memcpy(dst+i, src, dst_len % src_len);
 }
-/*---------------------------------------------------------------------------*/
-static void
-setreg(enum cc2420_register regname, unsigned value)
-{
-  CC2420_WRITE_REG(regname, value);
-}
-/*---------------------------------------------------------------------------*/
-static void
-strobe(enum cc2420_register regname)
-{
-  CC2420_STROBE(regname);
-}
-/*---------------------------------------------------------------------------*/
-static unsigned int
-status(void)
-{
-  uint8_t status;
-  CC2420_GET_STATUS(status);
-  return status;
-}
-/*---------------------------------------------------------------------------*/
-static void
-flushrx(void)
-{
-  uint8_t dummy;
 
-  CC2420_READ_FIFO_BYTE(dummy);
-  CC2420_STROBE(CC2420_SFLUSHRX);
-  CC2420_STROBE(CC2420_SFLUSHRX);
-}
 /*---------------------------------------------------------------------------*/
 void
 send_len(struct rtimer *t, void *ptr)
 {
-	/* schedule next send */
-	if (ptr) {
-		rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 64, 0, send_len, (void *)1);
+		if (ptr) {
+			/* schedule next send */
+			rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 2, 0, send_len, (void *)1);
 		
-		/* Test: set first transmitted bit = 1 */
-		CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
-		/* Start serial data transmission */
-		CC2420_CLEAR_FIFOP_INT();
-		CC2420_ENABLE_FIFOP_INT();
+			/* Test: set first transmitted bit = 1 */
+			CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
+			/* Start serial data transmission */
+			CC2420_CLEAR_FIFOP_INT();
+			CC2420_ENABLE_FIFOP_INT();
+			strobe(CC2420_STXON);
+		}
+}
+/*---------------------------------------------------------------------------*/
+void
+send_len_buf(struct rtimer *t, void *ptr)
+{
+	if (ptr) {
+		/* Write empty frame to TX FIFO. */
+		// frame length is appended by a bogus byte that induces a minimal delay to the power-down of the TX circuit, thus avoiding corruption of transmitted frame length.
+		static uint8_t total_len[2] = {127, 0xA5};
+		total_len[0] = len_hdr;
+		CC2420_WRITE_FIFO_BUF(&total_len, 2);
+
+		/* Transmit */
 		strobe(CC2420_STXON);
+
+		/* We wait until underflow has occured, which should take at least
+			 tx touraround time (128 us) + 4 preamble bytes + SFD byte (5*32=160 us) = 288 us */
+		BUSYWAIT_UNTIL((status() & BV(CC2420_TX_UNDERFLOW)), RTIMER_SECOND / 2000);
+
+		/* Flush TX FIFO */
+		strobe(CC2420_SFLUSHTX);
+
+		/* schedule next send */
+		/* rtimer_set(&rt, RTIMER_NOW() + rtimer_interval, 0, send_len_buf, (void *)1); */
+		/* if (rt.clock + rtimer_interval - RTIMER_NOW() > 0) { */
+			rtimer_set(&rt, rt.time + rtimer_interval, 0, send_len_buf, (void *)1);
+		/* } else { */
+		/* 	rtimer_set(&rt, RTIMER_NOW() + rtimer_interval, 0, send_len_buf, (void *)1); */
+		/* } */
 	}
 }
 /*---------------------------------------------------------------------------*/
@@ -164,16 +199,17 @@ reset_transmitter(void)
 
   /* set normal TX mode 0, normal RX mode 0 */
   reg = getreg(CC2420_MDMCTRL1);
-	reg &= ~(TX_MODE_BV & RX_MODE_BV);
+	reg &= ~(TX_MODE_BV | RX_MODE_BV);
   setreg(CC2420_MDMCTRL1, reg);
-	printf("0x%04x\n", reg);
+	/* printf("0x%04x\n", reg); */
 
   /* set TX DAC's data source to modulator (normal operation) */
-  /* reg = getreg(CC2420_DACTST); */
-  /* setreg(CC2420_DACTST, reg & 0x0FFF); */
+  reg = getreg(CC2420_DACTST);
+  setreg(CC2420_DACTST, reg & 0x0FFF);
 
   /* enter RX mode */
-  strobe(CC2420_SRXON);
+  /* strobe(CC2420_SRXON); */
+	strobe(CC2420_SRFOFF);
 }
 /*---------------------------------------------------------------------------*/
 /* Transmit a continuous carrier */
@@ -183,59 +219,134 @@ send_carrier(int mode)
   unsigned reg = getreg(CC2420_MDMCTRL1);
   if(mode == UNMOD) {
 		/* unmodulated carrier */
-    reg = (reg & 0xFFF3) | (3 << 2);
+		reg &= ~TX_MODE_BV;
+		reg |= TX_MODE_3;
     setreg(CC2420_MDMCTRL1, reg);
     setreg(CC2420_DACTST, 0x1800);
   } else if(mode == MOD) {
 		/* randomly modulated carrier */
-    reg = (reg & 0xFFF3) | (3 << 2);
+		reg &= ~TX_MODE_BV;
+		reg |= TX_MODE_3;
     setreg(CC2420_MDMCTRL1, reg);
-  }
+  } else if(mode == PN) {
+		reg &= ~TX_MODE_BV;
+		reg |= TX_MODE_2;
+    setreg(CC2420_MDMCTRL1, reg);
+	}
 	strobe(CC2420_STXON);
 }
 /*---------------------------------------------------------------------------*/
-#define TX_INTERVAL CLOCK_SECOND / 2
 static void
-start_mode(enum modes to)
+inc_first_payload(void)
+{
+	++hex_seq[1];
+}
+
+/*---------------------------------------------------------------------------*/
+void
+start_mode(int to)
 {
 	unsigned reg;
 	if(mode == JAM) {
 		jam_ena = 0;
 		CC2420_DISABLE_CCA_INT();
 		CC2420_CLEAR_CCA_INT();
-	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == SERIAL_JAM) {
+	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == SERIAL_JAM || mode == BUF_JAM || mode == PN || mode == TX2) {
+		rt.ptr = NULL; 		// stop rtimer
 		reset_transmitter();
-		// stop rtimer
-		rt.ptr = NULL;
 	}
   mode = to;
   switch(mode) {
   case RX: 
+		// clear RX statistics
+		rimestats.llrx = 0;
+		rimestats.badcrc = 0; 
+		rimestats.badsynch = 0; 
+		rimestats.toolong = 0;
+		sum_lqi = 0;
+		sum_rssi = 0;
+
 		CC2420_CLEAR_FIFOP_INT();
 		CC2420_ENABLE_FIFOP_INT();
 		flushrx();
 		strobe(CC2420_SRXON);
+
     printf("RX mode\n");
     break;
+
   case CH:
-    printf("Channel sample mode\n");
+		strobe(CC2420_SRXON);
 		etimer_set(&et, CLOCK_SECOND / 1);
+
+    printf("Channel sample mode\n");
     break;
+
   case TX:
-		printf("TX mode\n"); 
+#define AUTOACK (1 << 4)
+#define ADR_DECODE (1 << 11)
 		seqno = 0;
-		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt
-		etimer_set(&et, TX_INTERVAL);
+		/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt */
+		/* Turn off automatic packet acknowledgment and address decoding. */
+		reg = getreg(CC2420_MDMCTRL0);
+		reg &= ~(AUTOACK | ADR_DECODE);
+		strobe(CC2420_SRXON);
+
+		etimer_set(&et, tx_interval);
+
+		printf("TX mode\n"); 
 		break;
+
+  case TX2:
+		seqno = 0;
+		/* Turn on automatic packet acknowledgment and address decoding. */
+		reg = getreg(CC2420_MDMCTRL0);
+		reg |= AUTOACK | ADR_DECODE;
+		setreg(CC2420_MDMCTRL0, reg);
+		strobe(CC2420_SRXON);
+
+		etimer_set(&et, tx_interval);
+
+		printf("TX2 mode\n"); 
+		break;
+
   case UNMOD: 
+		send_carrier(mode); 
+
 		printf("Unmodulated carrier mode\n"); 
-		send_carrier(mode); 
 		break;
+
   case MOD: 
-		printf("Modulated carrier mode\n"); 
+		/* etimer_set(&et, CLOCK_SECOND*30); */
+		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
 		send_carrier(mode); 
+
+		printf("Modulated carrier mode\n"); 
 		break;
+
+  case PN: 
+		/* hex_seq[0] = len_hdr; */
+		/* ++hex_seq[0]; */
+		
+		pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_payload);
+		/* hex_seq[1]++; */
+		/* for(i = 0; i < sizeof(hex_seq); i+=sizeof(hex_seq)) { */
+		/* 	memcpy(&txfifo_data[i], size); */
+		/* } */
+		CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
+		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
+		send_carrier(mode); 
+
+		printf("Pseudo random data mode\n"); 
+		break;
+
+  case OFF:
+		reset_transmitter();
+		/* (void)cc2420_off(); */
+		printf("Radio Off mode\n"); 
+		break;
+
 	case JAM:
+		reset_transmitter();
 		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
 		CC2420_CLEAR_FIFOP_INT();
 		flushrx();
@@ -244,12 +355,14 @@ start_mode(enum modes to)
 		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
 #endif
 		jam_ena = 1;
+		strobe(CC2420_SRXON);
+
 		printf("Jam mode\n");
 		printf("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
 		printf("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
 		break;
+
 	case SNIFF:
-		printf("Sniff mode\n");
 		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
 		CC2420_CLEAR_FIFOP_INT();
 		flushrx();
@@ -263,10 +376,12 @@ start_mode(enum modes to)
 		setreg(CC2420_MDMCTRL1, reg);
 		CC2420_ENABLE_FIFOP_INT();
 #endif
+
+		printf("Sniff mode\n");
 		break;
+
 	case SERIAL_JAM:
 		/* Periodic tx */
-    printf("Serial jamming mode\n");
 		// Test: CCA interrupt might cause extra delay
 		CC2420_DISABLE_CCA_INT();
 		CC2420_CLEAR_CCA_INT();
@@ -285,12 +400,37 @@ start_mode(enum modes to)
 		reg |= TX_MODE_1 | RX_MODE_1;
 		setreg(CC2420_MDMCTRL1, reg);
 		reg = getreg(CC2420_MDMCTRL1);
-		printf("MDMCTRL1 = 0x%04x\n", reg);
+		/* printf("MDMCTRL1 = 0x%04x\n", reg); */
+		
+		/* Send Droplet */
+		send_len(&rt, (void *)1);
 
-		/* etimer_set(&et, CLOCK_SECOND / 128); */
-		rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 128, 0, send_len, (void *)1);
+    printf("Serial jamming mode\n");
 		break;
-  default:;
+
+	case BUF_JAM:
+		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt
+		// Test: CCA interrupt might cause extra delay
+		CC2420_DISABLE_CCA_INT();
+		CC2420_CLEAR_CCA_INT();
+
+		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND / 2);
+		/* Start sending Droplets */
+		// add a small jitter (+/-122 us, assuming RTIMER_SECOND = 32768) around the average interval to randomize phase
+		rtimer_set(&rt, RTIMER_NOW() + rtimer_interval - 4 + (random_rand()%9) , 0, send_len_buf, (void *)1);
+
+    printf("Buffered jamming mode\n");
+		break;
+
+	case HSSD:
+		printf("HSSD mode\n");
+		// Disable interrupts
+		CC2420_DISABLE_CCA_INT();
+		CC2420_DISABLE_FIFOP_INT();
+		break;
+
+  default:
+		printf("undefined mode: %d\n", to);
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -298,21 +438,40 @@ start_mode(enum modes to)
 /* static uint16_t rxbuf[64]; */
 /* static const uint8_t *rxbuf_ptr = (uint8_t *)rxbuf; */
 
-#define MAX_TX_PACKETS 100
-#define MAX_PHY_LEN 30
 void
 cc2420_set_receiver(void (*f)(const struct radio_driver *));
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(test_process, ev, data)
 {
-  /* char str[41];// PHY LEN = strlen + broadcast hdrlen (9 bytes) */
+	int i;
 	int errno;
 	const struct radio_driver *d;
 	static char last_ch;
+	static uint16_t buf[127/2+1];
+	static uint8_t *buf_ptr = (uint8_t *)buf;
 
   PROCESS_BEGIN();
 
-	/* node_id_burn(1); */
+	PROCESS_PAUSE();
+
+	// debug prints
+	printf("F_CPU %lu CLOCK_CONF_SECOND %lu RTIMER_CONF_SECOND %u\n", F_CPU, CLOCK_CONF_SECOND, RTIMER_SECOND);
+
+	// pre-fill pseudo random data for TXFIFO
+	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_payload);
+	char dbuf[300];
+	char *dbuf_ptr = dbuf;
+	for(i = 0;i < 128;++i){
+		dbuf_ptr += sprintf(dbuf_ptr, "%02x", txfifo_data[i]);
+	}
+	printf("txfifo: %s\n", dbuf);
+
+	payload_len = PAYLOAD_LEN;
+	max_tx_packets = MAX_TX_PACKETS;
+
+	/* node_id_burn(101); */
+
+	commands_set_callback(start_mode);
 
 	d = &cc2420_driver;
 
@@ -330,7 +489,7 @@ PROCESS_THREAD(test_process, ev, data)
 
 	/* Change channel */
   cc2420_set_channel(CHANNEL);
-	/* cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL); */
+	cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL);
 
 	etimer_set(&et, CLOCK_SECOND *1);
 	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
@@ -338,15 +497,13 @@ PROCESS_THREAD(test_process, ev, data)
   printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
 
   /* initialize transceiver mode */
-  start_mode(INITIAL_MODE);
+  start_mode(0);
 
 	unsigned reg;
 	reg = getreg(CC2420_IOCFG0);
 	printf("IOCFG0 = 0x%04x\n", reg);
 	/* set test output signal */
 	reg = getreg(CC2420_IOCFG1);
-#define CCAMUX_BV (31<<0)
-#define SFDMUX_BV (31<<5)
 	/* reg = (reg & (~CCAMUX_BV)) | (23<<0); */
 	/* setreg(CC2420_IOCFG1, reg); */
 	printf("IOCFG1 = 0x%04x\n", reg);
@@ -359,38 +516,69 @@ PROCESS_THREAD(test_process, ev, data)
     PROCESS_WAIT_EVENT();
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
 			etimer_reset(&et);
-      if(mode == TX && seqno < MAX_TX_PACKETS) {
-#if ENABLE_FAST_TX
-				char str[1+MAX_PHY_LEN]; // PHY HDR + payload
-				memset(str, 0, sizeof(str));
-				str[0] = MAX_PHY_LEN + 2; // PHY HDR= payload size + CRC size
-				snprintf(&str[1], sizeof(str)-1, "%u", seqno);
-				errno = d->send(str, sizeof(str)); // PHY HDR + PHY payload -> TX FIFO
-#else
-				char str[MAX_PHY_LEN];
-				memset(str, 0, sizeof(str));
-				snprintf(str, sizeof(str), "%u", seqno);
-				errno = d->send(str, sizeof(str));
-#endif
-				if (errno == RADIO_TX_OK) {
-					/* printf("cc2420_send ok: %d bytes\n", sizeof(str)); */
-					printf("cc2420_send ok: %s\n", str);
+      if(mode == TX) {
+				if(seqno < max_tx_packets) {
+					etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
+
+					int i;
+					for(i = 0;i < payload_len;++i) {
+						buf_ptr[i] = (uint8_t)random_rand();
+					}
+					snprintf((char *)buf, sizeof(buf), "%u", seqno);
+
+					errno = d->send(buf, payload_len);
+					if (errno == RADIO_TX_OK) {
+						/* printf("cc2420_send ok: %d bytes\n", sizeof(str)); */
+						/* printf("cc2420_send ok: %s\n", str); */
+						printf(". ");
+					} else {
+						printf("cc2420_send error: %d\n", errno);
+					}
+					++seqno;
 				} else {
-					printf("cc2420_send error: %d\n", errno);
+					etimer_stop(&et);
+					printf("Finished sending %u packets\n", seqno);
 				}
-				++seqno;
+			}	else if(mode == TX2) {
+				if(seqno < max_tx_packets) {
+					etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
+
+#define MHR_LEN 7 // 16-bit FCF + 8-bit SEQ + 16-bit PAN + 16-bit DST
+					int i;
+					// FCF: frame type Data, ack req = 1, dst add mode = 2, frame ver = 1 src add mode = 0
+					buf[0] = 0x01<<0 | 0<<3 | 0<<4 | 1<<5 | 0<<6 | 0x0<<7 | 2<<10 | 1<<12 | 0<<14;
+					buf_ptr[2] = (uint8_t)seqno % 0xFF;
+					buf_ptr[3] = 0xFF;
+					buf_ptr[4] = 0xFF;
+					buf_ptr[5] = 0x12; // dest. rimeaddr lower byte
+					buf_ptr[6] = 0x00; // dest. rimeaddr higher byte
+					for(i = MHR_LEN;i < payload_len;++i) {
+						buf_ptr[i] = (uint8_t)random_rand();
+					}
+					/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
+
+					errno = d->send(buf, payload_len);
+					if (errno == RADIO_TX_OK) {
+						/* printf("cc2420_send ok: %d bytes\n", sizeof(str)); */
+						/* printf("cc2420_send ok: %s\n", str); */
+						printf(". ");
+					} else {
+						printf("cc2420_send error: %d\n", errno);
+					}
+					++seqno;
+				} else {
+					etimer_stop(&et);
+					printf("Finished sending %u packets\n", seqno);
+				}
       } else if(mode == CH) {
-				/* int8_t rssi = cc2420_rssi(); */
-				int rssi;
-				BUSYWAIT_UNTIL(status() & BV(CC2420_RSSI_VALID), RTIMER_SECOND / 100);
-				rssi = (int)((signed char)getreg(CC2420_RSSI));
-				unsigned lna = getreg(CC2420_AGCCTRL) & 0x0003;
-				printf("rssi = %d, lna = %u\n", rssi, lna);
-				if(!CC2420_CCA_IS_1) {
-					leds_on(LEDS_BLUE);
-					clock_delay(200);
-					leds_off(LEDS_BLUE);
+				int rssi = -127;
+				unsigned lna = 0;
+				/* BUSYWAIT_UNTIL(status() & BV(CC2420_RSSI_VALID), RTIMER_SECOND / 100); */
+				if (status() & BV(CC2420_RSSI_VALID)) {
+					rssi = (int)((signed char)getreg(CC2420_RSSI));
+					lna = getreg(CC2420_AGCCTRL) & 0x0003;
 				}
+				printf("rssi = %d, lna = %u\n", rssi, lna);
       } else if(mode == SERIAL_JAM) {
 				/* Test: set first transmitted bit = 1 */
 				CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
@@ -398,6 +586,12 @@ PROCESS_THREAD(test_process, ev, data)
 				CC2420_CLEAR_FIFOP_INT();
 				CC2420_ENABLE_FIFOP_INT();
 				strobe(CC2420_STXON);
+			} else if(mode == MOD || mode == PN || BUF_JAM) {
+				etimer_stop(&et);
+				rt.ptr = NULL; 		// stop rtimer
+				reset_transmitter();
+				printf("Finished transmission after %lu seconds\n",
+							 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
 			}
     } else if(ev == serial_line_event_message) {
       char ch = *(char *)data;
@@ -405,47 +599,9 @@ PROCESS_THREAD(test_process, ev, data)
 				ch = last_ch;
 			}
 			last_ch = ch;
-			if(ch >= '0' && ch <= '9') {
-					cc2420_set_txpower(tx_power_level[ch - '0']);
-					printf("tx power = %u\n", cc2420_get_txpower());
-      } else if(ch == 'r') {
-				int8_t val = cc2420_rssi();
-				printf("rssi = %d\n", val);
-      } else if(ch == 'n') {
-				start_mode((mode + 1) % NUM_MODES);
-      } else if(ch == 'p') {
-				start_mode((mode - 1) % NUM_MODES);
-      } else if(ch == 'e') {
-				watchdog_reboot();
-      } else if(ch == '+') {
-				int chn = cc2420_get_channel();
-				chn = (chn - 11 + 1) % 16 + 11;
-				cc2420_set_channel(chn);
-				printf("channel = %d\n", chn);
-      } else if(ch == '-') {
-				int chn = cc2420_get_channel();
-				chn = (chn - 11 + 15) % 16 + 11;
-				cc2420_set_channel(chn);
-				printf("channel = %d\n", chn);
-			} else if(ch == 'c') {
-				reg = getreg(CC2420_IOCFG1);
-				unsigned ccamux = (reg & CCAMUX_BV) >> 0;
-				ccamux = ccamux==31 ? 0 : ccamux+1;
-				reg = (reg & (~CCAMUX_BV)) | (ccamux<<0);
-				setreg(CC2420_IOCFG1, reg);
-				printf("CCAMUX = %02u\n", ccamux);
-			} else if(ch == 's') {
-				reg = getreg(CC2420_IOCFG1);
-				unsigned sfdmux = (reg & SFDMUX_BV) >> 5;
-				sfdmux = sfdmux==31 ? 0 : sfdmux+1;
-				reg = (reg & (~SFDMUX_BV)) | (sfdmux<<5);
-				setreg(CC2420_IOCFG1, reg);
-				printf("SFDMUX = %02u\n", sfdmux);
-			} else if(ch =='w') {
-					printf("tx power = %u\n", cc2420_get_txpower());
-			} else {
-				printf("invalid input\n");
-      }
+
+			/* Single character command handlers */
+			do_command(ch);
     } else if(ev == sensors_event && data == &button_sensor) {
       start_mode((mode + 1) % NUM_MODES);
     }
@@ -453,6 +609,7 @@ PROCESS_THREAD(test_process, ev, data)
 
   PROCESS_END();
 }
+
 /*---------------------------------------------------------------------------*/
 int
 decision(long int n, uint8_t len, uint8_t *buf)

@@ -38,6 +38,7 @@
 #include "dev/spi.h"
 #include "dev/cc2420.h"
 #include "isr_compat.h"
+#include "cc2420-jammer.h"
 
 #define CONF_SFD_TIMESTAMPS 0
 
@@ -46,8 +47,7 @@
 #endif
 
 extern rtimer_clock_t cc2420_interrupt_time;
-enum modes {RX, JAM, TX, SNIFF, SERIAL_JAM, MOD, UNMOD, CH};
-extern enum modes mode;
+
 /*---------------------------------------------------------------------------*/
 #if CONTIKI_TARGET_Z1
 #define RETURN return 1

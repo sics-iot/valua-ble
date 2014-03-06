@@ -53,6 +53,7 @@
 #include "net/netstack.h"
 
 #include "sys/timetable.h"
+#include "cc2420-jammer.h"
 
 #define WITH_SEND_CCA 0
 
@@ -80,7 +81,7 @@
 #define FOOTER1_CRC_OK      0x80
 #define FOOTER1_CORRELATION 0x7f
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
@@ -106,9 +107,6 @@ rtimer_clock_t cc2420_time_of_arrival, cc2420_time_of_departure;
 int cc2420_authority_level_of_sender;
 
 int cc2420_packets_seen, cc2420_packets_read;
-
-enum modes {RX, JAM, TX, SNIFF, SERIAL_JAM, MOD, UNMOD, CH};
-extern enum modes mode;
 
 volatile int jam_ena;
 
@@ -195,7 +193,7 @@ getrxbyte(uint8_t *byte)
 {
   CC2420_READ_FIFO_BYTE(*byte);
 }
-static void
+void
 flushrx(void)
 {
   uint8_t dummy;
@@ -205,13 +203,13 @@ flushrx(void)
   CC2420_STROBE(CC2420_SFLUSHRX);
 }
 /*---------------------------------------------------------------------------*/
-static void
+void
 strobe(enum cc2420_register regname)
 {
   CC2420_STROBE(regname);
 }
 /*---------------------------------------------------------------------------*/
-static unsigned int
+unsigned int
 status(void)
 {
   uint8_t status;
@@ -265,7 +263,7 @@ static void RELEASE_LOCK(void) {
   locked--;
 }
 /*---------------------------------------------------------------------------*/
-static unsigned
+unsigned
 getreg(enum cc2420_register regname)
 {
   unsigned reg;
@@ -273,7 +271,7 @@ getreg(enum cc2420_register regname)
   return reg;
 }
 /*---------------------------------------------------------------------------*/
-static void
+void
 setreg(enum cc2420_register regname, unsigned value)
 {
   CC2420_WRITE_REG(regname, value);
@@ -346,7 +344,7 @@ cc2420_init(void)
 #endif
 
 	/* Set preamble length */
-#define PREAMBLE_LENGTH_BV (7<<0)
+#define PREAMBLE_LENGTH_BV (15<<0)
 	reg &= ~PREAMBLE_LENGTH_BV;
 	reg |= (2 & PREAMBLE_LENGTH_BV); // set preamble length to N+1 bytes
 
@@ -490,7 +488,7 @@ cc2420_transmit(unsigned short payload_len)
   /* If we are using WITH_SEND_CCA, we get here if the packet wasn't
      transmitted because of other channel activity. */
   RIMESTATS_ADD(contentiondrop);
-  PRINTF("cc2420: do_send() transmission never started\n");
+  printf("cc2420: do_send() transmission never started\n");
 
   if(packetbuf_attr(PACKETBUF_ATTR_RADIO_TXPOWER) > 0) {
     /* Restore the transmission power */
@@ -526,6 +524,7 @@ cc2420_prepare(const void *payload, unsigned short payload_len)
 
 #if ENABLE_FAST_TX==0
   total_len = payload_len + AUX_LEN;
+  /* total_len = payload_len + AUX_LEN + 128; // test send oversize LEN field */
   CC2420_WRITE_FIFO_BUF(&total_len, 1);
   CC2420_WRITE_FIFO_BUF(payload, payload_len);
 #elif ENABLE_FAST_TX==2
@@ -646,6 +645,40 @@ cc2420_set_channel(int c)
 
   RELEASE_LOCK();
   return 1;
+}
+/*---------------------------------------------------------------------------*/
+int
+cc2420_set_frequency(uint16_t f)
+{
+  GET_LOCK();
+  /*
+   * Writing RAM requires crystal oscillator to be stable.
+   */
+  BUSYWAIT_UNTIL((status() & (BV(CC2420_XOSC16M_STABLE))), RTIMER_SECOND / 10);
+
+  /* Wait for any transmission to end. */
+  BUSYWAIT_UNTIL(!(status() & BV(CC2420_TX_ACTIVE)), RTIMER_SECOND / 10);
+
+  setreg(CC2420_FSCTRL, (f - 2048) + 0x4000);
+
+  /* If we are in receive mode, we issue an SRXON command to ensure
+     that the VCO is calibrated. */
+  if(receive_on) {
+    strobe(CC2420_SRXON);
+  }
+
+  RELEASE_LOCK();
+  return 1;
+}
+/*---------------------------------------------------------------------------*/
+uint16_t
+cc2420_get_frequency(void)
+{
+	uint16_t f;
+
+  f = 2048 + (getreg(CC2420_FSCTRL) & 0x03FF);
+
+  return f;
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -824,20 +857,20 @@ cc2420_fifop_interrupt(void)
   CC2420_CLEAR_FIFOP_INT();
 	
 	if (bit==0) {
-			bit = NUM_BITS;
-			CC2420_DISABLE_FIFOP_INT();
-			CC2420_CLEAR_FIFOP_INT();
-			CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
-	/* some delay needed to ensure the last few bits get transmitted before transmitter shuts down */
-			clock_delay(16); // TODO: replace magic number with F_CPU-dependent formula
-			/* strobe(CC2420_SRXON); */
-			strobe(CC2420_SRFOFF);
-			/* CC2420_DISABLE_FIFOP_INT(); */
+		bit = NUM_BITS;
+		CC2420_DISABLE_FIFOP_INT();
+		CC2420_CLEAR_FIFOP_INT();
+		CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+		/* some delay needed to ensure the last few bits get transmitted before transmitter shuts down */
+		clock_delay(16); // TODO: replace magic number with F_CPU-dependent formula
+		/* strobe(CC2420_SRXON); */
+		strobe(CC2420_SRFOFF);
+		/* CC2420_DISABLE_FIFOP_INT(); */
 	} else {
 		if (bit==1) {
-		CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
+			CC2420_FIFO_PORT(OUT) &= ~BV(CC2420_FIFO_PIN);
 		} else {
-		CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
+			CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
 		}
 		--bit;
 	}
@@ -924,7 +957,7 @@ PROCESS_THREAD(cc2420_process, ev, data)
     TIMETABLE_TIMESTAMP(cc2420_timetable, "poll");
 #endif /* CC2420_TIMETABLE_PROFILING */
     
-    PRINTF("cc2420_process: calling receiver callback\n");
+    /* PRINTF("cc2420_process: calling receiver callback\n"); */ // Zhitao
 
     packetbuf_clear();
     packetbuf_set_attr(PACKETBUF_ATTR_TIMESTAMP, last_packet_timestamp);
@@ -975,6 +1008,7 @@ cc2420_read(void *buf, unsigned short bufsize)
     RELEASE_LOCK();
     return 0;
   }
+	/* len &= ~0x80; // cut MSB of oversize LEN [128, 255] => LEN - 128 */
 
   if(len <= AUX_LEN) {
     flushrx();
