@@ -818,13 +818,13 @@ cc2420_cca_interrupt(void)
 	if(jam_ena && decision(count, len, NULL) > 0) {
 		send_jam();
 		flushrx();
-		snprintf(info_str[info_str_index], sizeof(info_str), "%d %u %u !", count, clock_seconds(), len);
+		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %u !", count, clock_seconds(), len);
 	} else {
 		/* read remaining payload bytes */
 		/* clock_delay(32*len/2*3); // 32 us per byte, 0.77 us per delay tick */
 		while(CC2420_SFD_IS_1) {;} // wait until reception finishes
 		FASTSPI_READ_FIFO_GARBAGE(len);
-		snprintf(info_str[info_str_index], sizeof(info_str), "%d %u %u", count, clock_seconds(), len);
+		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %u", count, clock_seconds(), len);
 	}
 	process_post(&cc2420_debug_process, PROCESS_EVENT_MSG, info_str[info_str_index]);
 	info_str_index = info_str_index == INFO_STR_NUM - 1 ? 0 : info_str_index+1;
@@ -962,6 +962,7 @@ PROCESS_THREAD(cc2420_process, ev, data)
     packetbuf_clear();
     packetbuf_set_attr(PACKETBUF_ATTR_TIMESTAMP, last_packet_timestamp);
     len = cc2420_read(packetbuf_dataptr(), PACKETBUF_SIZE);
+		PRINTF("len = %d\n", len);
     
     packetbuf_set_datalen(len);
     
@@ -1002,13 +1003,17 @@ cc2420_read(void *buf, unsigned short bufsize)
   getrxbyte(&len);
 
   if(len > CC2420_MAX_PACKET_LEN) {
-    /* Oops, we must be out of sync. */
-    flushrx();
-    RIMESTATS_ADD(badsynch);
+    /* /\* Oops, we must be out of sync. *\/ */
+    /* flushrx(); */
+    /* RIMESTATS_ADD(badsynch); */
+    /* RELEASE_LOCK(); */
+    /* return 0; */
+		/* zhitao: TEST - return len as if received in reverse phase mode */
+		flushrx();
+		len = ((((len>>4)+8)%16)<<4) + ((len&0x0f)+8)%16 - AUX_LEN;
     RELEASE_LOCK();
-    return 0;
+		return len;
   }
-	/* len &= ~0x80; // cut MSB of oversize LEN [128, 255] => LEN - 128 */
 
   if(len <= AUX_LEN) {
     flushrx();

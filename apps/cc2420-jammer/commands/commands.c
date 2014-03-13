@@ -370,9 +370,11 @@ reverse_syncword(void)
 		/* test: send with non-standard sync word to avoid causing synchronization */
 	uint16_t reg;
 	reg = getreg(CC2420_SYNCWORD);
-	reg = (reg & 0x00FF) | (~reg  & 0xFF00);
-	/* if (reg == 0xA70F) {reg = 0x2E88;} */
-	/* else {reg = 0xA70F;} */
+	/* reg = (reg & 0x00FF) | (~reg  & 0xFF00); */
+	
+	if (reg == 0xA70F) {reg = 0xA60F;}
+	else if (reg == 0xA60F) {reg = 0x2E88;}
+	else {reg = 0xA60F;}
 	setreg(CC2420_SYNCWORD, reg);
 	reg = getreg(CC2420_SYNCWORD);
 	printf("Syncword: 0x%X\n", reg);
