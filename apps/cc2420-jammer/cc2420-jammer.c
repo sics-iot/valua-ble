@@ -499,7 +499,7 @@ PROCESS_THREAD(test_process, ev, data)
   /* initialize transceiver mode */
   start_mode(0);
 
-	unsigned reg;
+	uint16_t reg;
 	reg = getreg(CC2420_IOCFG0);
 	printf("IOCFG0 = 0x%04x\n", reg);
 	/* set test output signal */
@@ -520,10 +520,25 @@ PROCESS_THREAD(test_process, ev, data)
 				if(seqno < max_tx_packets) {
 					etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
 
-					int i;
-					for(i = 0;i < payload_len;++i) {
-						buf_ptr[i] = (uint8_t)random_rand();
-					}
+					/* int i; */
+					/* for(i = 0;i < payload_len;++i) { */
+					/* 	buf_ptr[i] = (uint8_t)random_rand(); */
+					/* } */
+					/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
+
+					/* Test: fill payload with SYNC header */
+#define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 )
+#define MOD_MODE_BIT 4
+#define MOD_MODE_BV (1<<MOD_MODE_BIT)
+					uint8_t sync_hdr[] = {0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7
+					// In case in RP mode, reverse SYNC header back to normal mode
+					if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) {
+						for (i = 0;i < sizeof(sync_hdr);i++) {
+							sync_hdr[i] = REVERSE_PHASE(sync_hdr[i]);
+						}
+					};
+					memcpy(buf_ptr+payload_len-sizeof(sync_hdr), &sync_hdr[0], sizeof(sync_hdr));
+					/* pad(buf_ptr, payload_len, sync_hdr, sizeof(sync_hdr), NULL); */ // pad payload with SYNC headers
 					snprintf((char *)buf, sizeof(buf), "%u", seqno);
 
 					errno = d->send(buf, payload_len);

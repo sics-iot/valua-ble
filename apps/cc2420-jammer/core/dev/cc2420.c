@@ -1004,15 +1004,15 @@ cc2420_read(void *buf, unsigned short bufsize)
 
   if(len > CC2420_MAX_PACKET_LEN) {
     /* /\* Oops, we must be out of sync. *\/ */
-    /* flushrx(); */
-    /* RIMESTATS_ADD(badsynch); */
-    /* RELEASE_LOCK(); */
-    /* return 0; */
-		/* zhitao: TEST - return len as if received in reverse phase mode */
-		flushrx();
-		len = ((((len>>4)+8)%16)<<4) + ((len&0x0f)+8)%16 - AUX_LEN;
+    flushrx();
+    RIMESTATS_ADD(badsynch);
     RELEASE_LOCK();
-		return len;
+    return 0;
+		/* zhitao: TEST - return len as if received in reverse phase mode */
+		/* flushrx(); */
+		/* len = ((((len>>4)+8)%16)<<4) + ((len&0x0f)+8)%16 - AUX_LEN; */
+    /* RELEASE_LOCK(); */
+		/* return len; */
   }
 
   if(len <= AUX_LEN) {
