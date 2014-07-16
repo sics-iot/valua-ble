@@ -32,14 +32,16 @@
 #define SFDMUX_BV (31<<5)
 
 int mode;
-clock_time_t tx_interval = DEFAULT_TX_INTERVAL;
-int max_tx_packets = DEFAULT_MAX_TX_PACKETS;
-int payload_len = DEFAULT_PAYLOAD_LEN;
+clock_time_t tx_interval;;
+int max_tx_packets;
+int payload_len;
 struct etimer et;
 struct rtimer rt;
 rtimer_clock_t rtimer_interval = DEFAULT_RTIMER_INTERVAL;
 long int sum_rssi;
 long unsigned sum_lqi;
+int min_rssi = 15, max_rssi = -55;
+unsigned min_lqi = 108, max_lqi = 0;
 uint8_t len_hdr = 127;
 
 extern int jam_ena;
@@ -193,11 +195,13 @@ sfd_mux_up(void)
 static void
 view_rx_statistics(void)
 {
-	printf("rx = %lu llrx = %lu avg_rssi = %ld avg_lqi = %lu packets_seen = %d packets_read = %d\n",
+	printf("rx = %lu llrx = %lu avg_rssi = %ld[%d,%d] avg_lqi = %lu[%u,%u] pkts_seen = %d pkts_read = %d\n",
 				 rimestats.rx,
 				 rimestats.llrx,
-				 (sum_rssi + (long int)rimestats.llrx/2) / (long int)rimestats.llrx,
+				 (sum_rssi - (long int)rimestats.llrx/2) / (long int)rimestats.llrx,
+				 min_rssi, max_rssi,
 				 (sum_lqi + rimestats.llrx/2) / rimestats.llrx,
+				 min_lqi, max_lqi,
 				 cc2420_packets_seen,
 				 cc2420_packets_read);
 
@@ -205,6 +209,10 @@ view_rx_statistics(void)
 	memset(&rimestats, 0, sizeof(rimestats));
 	sum_lqi = 0;
 	sum_rssi = 0;
+	min_rssi = 15;
+	max_rssi = -55;
+	min_lqi = 108;
+	max_lqi = 0;
 	cc2420_packets_seen = 0;
 	cc2420_packets_read = 0;
 }
@@ -228,7 +236,8 @@ static void
 tx_packets_up(void)
 {
 	// send More packets
-	max_tx_packets += 100;
+	/* max_tx_packets += 100; */
+	max_tx_packets *= 10;
 	printf("max tx packets = %d\n", max_tx_packets);
 }
 /*---------------------------------------------------------------------------*/
@@ -236,7 +245,8 @@ static void
 tx_packets_down(void)
 {
 	// send Fewer packets
-	max_tx_packets -= 100;
+	/* max_tx_packets -= 100; */
+		max_tx_packets /= 10;
 	printf("max tx packets = %d\n", max_tx_packets);
 }
 /*---------------------------------------------------------------------------*/
@@ -249,14 +259,16 @@ this_mode_again(void)
 static void
 payload_len_up(void)
 {
-	payload_len++;
+	/* payload_len++; */
+	payload_len+=10;
 	printf("payload len =%d\n", payload_len);
 }
 /*---------------------------------------------------------------------------*/
 static void
 payload_len_down(void)
 {
-	payload_len--;
+	/* payload_len--; */
+	payload_len-=10;
 	printf("payload len =%d\n", payload_len);
 }
 /*---------------------------------------------------------------------------*/
@@ -280,9 +292,10 @@ agc_vga_gain_up(void)
 	if(!vga_gain_oe) {
 		vga_gain_oe = 1;
 		vga_gain = 1;
+		/* vga_gain = 0x40; // switches on first gain stage */
 	} else if (vga_gain < 0x7F) {
-		/* vga_gain = (vga_gain<<1) + 1; */
 		vga_gain = vga_gain + 1;
+		/* vga_gain = 0x40 | (vga_gain>>1); // switches on successive gain stages */
 	} else {
 		vga_gain_oe = 0;
 	}
@@ -300,19 +313,20 @@ agc_vga_gain_up(void)
 static void
 debug_hssd(void)
 {
-#define HSSD_SRC_MSB 12
-#define HSSD_SRC_LSB 10
-	uint16_t reg = getreg(CC2420_IOCFG1);
-	/* uint16_t hssd_src = (reg & (0x0007 << 10)) >> 10; */
-	uint16_t hssd_src = FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB);
-	hssd_src = (hssd_src + 1) % 8;
-	/* reg = (reg & ~(0x0007 << 10)) | (hssd_src << 10); */
-	/* reg = SETFD(reg, hssd_src, HSSD_SRC_MSB, HSSD_SRC_LSB); */
-	/* reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), hssd_src << HSSD_SRC_LSB); */
-	reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), FDS(hssd_src, HSSD_SRC_LSB));
-	setreg(CC2420_IOCFG1, reg);
-	reg = getreg(CC2420_IOCFG1);
-	printf("HSSD_SRC: %u \n", FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB));
+/* #define HSSD_SRC_MSB 12 */
+/* #define HSSD_SRC_LSB 10 */
+/* 	uint16_t reg = getreg(CC2420_IOCFG1); */
+/* 	/\* uint16_t hssd_src = (reg & (0x0007 << 10)) >> 10; *\/ */
+/* 	uint16_t hssd_src = FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB); */
+/* 	hssd_src = (hssd_src + 1) % 8; */
+/* 	/\* reg = (reg & ~(0x0007 << 10)) | (hssd_src << 10); *\/ */
+/* 	/\* reg = SETFD(reg, hssd_src, HSSD_SRC_MSB, HSSD_SRC_LSB); *\/ */
+/* 	/\* reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), hssd_src << HSSD_SRC_LSB); *\/ */
+/* 	reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), FDS(hssd_src, HSSD_SRC_LSB)); */
+/* 	setreg(CC2420_IOCFG1, reg); */
+/* 	reg = getreg(CC2420_IOCFG1); */
+/* 	printf("HSSD_SRC: %u \n", FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB)); */
+	printf("Command disabled\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -322,6 +336,8 @@ debug_analog(void)
 #define ATESTMOD_MODE_MSB 3
 #define ATESTMOD_MODE_LSB 0
 #define ATESTMOD_PD_BV (0x0001 <<4)
+#define ATESTMOD_START 4 // first invocation jumpstarts to mode [0,8]
+
 	uint16_t reg = getreg(CC2420_TOPTST);
 	uint16_t atestmod_pd = (reg & ATESTMOD_PD_BV) >> 4;
 	uint16_t atestmod_mode = FVAL(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
@@ -329,14 +345,13 @@ debug_analog(void)
 	if (atestmod_pd) {
 		// Power is down: start Atest and start from mode 0
 		atestmod_pd = 0;
-		atestmod_mode = 0;
+		atestmod_mode = ATESTMOD_START; // start from mode 4
 	} else {
 		// next mode
-		++atestmod_mode;
-		if (atestmod_mode > 8) {
-			// Last mode: stop Atest
-			atestmod_pd = 1;
-		}
+		atestmod_mode = (atestmod_mode+1) % 9;
+		// Last mode: stop Atest
+		if (atestmod_mode == ATESTMOD_START)
+			atestmod_pd++;
 	}
 
 	reg = (reg & ~0x0001F) | (atestmod_pd << 4);
@@ -372,9 +387,12 @@ reverse_syncword(void)
 	reg = getreg(CC2420_SYNCWORD);
 	/* reg = (reg & 0x00FF) | (~reg  & 0xFF00); */
 	
-	if (reg == 0xA70F) {reg = 0xA60F;}
-	else if (reg == 0xA60F) {reg = 0x2E88;}
-	else {reg = 0xA60F;}
+	/* if (reg == 0xA70F) {reg = 0xA60F;} */
+	/* else if (reg == 0xA60F) {reg = 0x2E88;} */
+	/* else {reg = 0xA60F;} */
+	if (reg == 0xA70F) {reg = 0xA7FF;}
+	else if (reg == 0xA7FF) {reg = 0xA700;}
+	else {reg = 0xA70F;}
 	setreg(CC2420_SYNCWORD, reg);
 	reg = getreg(CC2420_SYNCWORD);
 	printf("Syncword: 0x%X\n", reg);
@@ -385,6 +403,18 @@ len_hdr_up(void)
 {
 	len_hdr = (len_hdr+1) % 128;
 	printf("len_hdr = %u\n", len_hdr);
+}
+/*---------------------------------------------------------------------------*/
+static void
+preamble_size_down(void)
+{
+#define PREAMBLE_LENGTH_MSB 3
+#define PREAMBLE_LENGTH_LSB 0
+	uint8_t reg = getreg(CC2420_MDMCTRL0);
+	uint8_t preamble_len = FVAL(reg, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB);
+	preamble_len = preamble_len>0 ? preamble_len-1 : 15;
+	setreg(CC2420_MDMCTRL0, SETFD(reg, preamble_len, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB));
+	printf("Preamble length: %u bytes\n", preamble_len+1);
 }
 /*---------------------------------------------------------------------------*/
 const struct command command_table[] =	{
@@ -414,11 +444,12 @@ const struct command command_table[] =	{
 	{'y', payload_len_down},
 	{'g', agc_lnamix_gainmode_up},
 	{'G', agc_vga_gain_up},
-	/* {'D', debug_hssd}, */
+	{'D', debug_hssd},
 	{'A', debug_analog},
 	{'P', reverse_phase},
 	{'S', reverse_syncword},
 	{'R', len_hdr_up},
+	{'E', preamble_size_down},
 	{'\0', NULL},
 };
 

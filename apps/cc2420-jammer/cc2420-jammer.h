@@ -11,9 +11,6 @@
 #define OFF 7
 #define TX2 8
 #define JAM 9
-#define SNIFF 10
-#define HSSD 11
-#define SERIAL_JAM 12
 #define LAST_MODE JAM
 #define NUM_MODES (LAST_MODE+1)
 

@@ -89,11 +89,17 @@
     while(!(cond) && RTIMER_CLOCK_LT(RTIMER_NOW(), t0 + (max_time)));   \
   } while(0)
 
+#define AUTOACK (1 << 4)
+#define ADR_DECODE (1 << 11)
 #define CCAMUX_BV (31<<0)
 #define SFDMUX_BV (31<<5)
+#define AUTOCRC (1<<5)
+
+#define FIFOP_THR_MSB 6
+#define FIFOP_THR_LSB 0
 
 #define CHANNEL 20
-#define DEFAULT_TXPOWER_LEVEL 23
+#define TXPOWER_LEVEL 7
 
 #define RX_MODE_BV (3<<0)
 #define RX_MODE_1 (1<<0)
@@ -104,9 +110,9 @@
 #define TX_MODE_2 (2<<2)
 #define TX_MODE_3 (3<<2)
 
-#define TX_INTERVAL (CLOCK_SECOND / 16)
+#define TX_INTERVAL (CLOCK_SECOND / 32)
 #define MAX_TX_PACKETS 10
-#define PAYLOAD_LEN 10
+#define PAYLOAD_LEN 20
 
 #ifndef TX_INTERVAL
 #define TX_INTERVAL DEFAULT_TX_INTERVAL
@@ -119,10 +125,11 @@
 #endif
 
 extern int jam_ena;
+extern const uint8_t jam_data[6];
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
 uint16_t seqno;
-static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7};
+static uint8_t hex_seq[] = {127, 1, 0x06, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
 static uint8_t txfifo_data[128];
 
 void
@@ -132,13 +139,13 @@ PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
 
 /*---------------------------------------------------------------------------*/
-void pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_src)(void))
+void pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_src)(uint8_t *src))
 {
 	int i;
 	for(i = 0;i < dst_len - dst_len % src_len;i+=src_len) {
 		memcpy(dst+i, src, src_len);
 		if(update_src) {
-			update_src();
+			update_src(src);
 		}
 	}
 	memcpy(dst+i, src, dst_len % src_len);
@@ -207,6 +214,20 @@ reset_transmitter(void)
   reg = getreg(CC2420_DACTST);
   setreg(CC2420_DACTST, reg & 0x0FFF);
 
+	/* enable AUTOCRC */
+	reg = getreg(CC2420_MDMCTRL0);
+	reg |= AUTOCRC;
+	setreg(CC2420_MDMCTRL0, reg);
+
+	/* reset FIFOP threshold to maximum */
+		reg = getreg(CC2420_IOCFG0);
+		setreg(CC2420_IOCFG0, SETFD(reg, 127, FIFOP_THR_MSB, FIFOP_THR_LSB));
+
+		/* Turn off autoack */
+		reg = getreg(CC2420_MDMCTRL0);
+		reg &= ~(AUTOACK | ADR_DECODE);
+		setreg(CC2420_MDMCTRL0, reg);
+
   /* enter RX mode */
   /* strobe(CC2420_SRXON); */
 	strobe(CC2420_SRFOFF);
@@ -237,9 +258,9 @@ send_carrier(int mode)
 }
 /*---------------------------------------------------------------------------*/
 static void
-inc_first_payload(void)
+inc_first_byte(uint8_t *src)
 {
-	++hex_seq[1];
+	(*(src+1))++;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -251,10 +272,15 @@ start_mode(int to)
 		jam_ena = 0;
 		CC2420_DISABLE_CCA_INT();
 		CC2420_CLEAR_CCA_INT();
-	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == SERIAL_JAM || mode == BUF_JAM || mode == PN || mode == TX2) {
+		// clear any jam data in TX
+		/* flushrx(); */
+		strobe(CC2420_SFLUSHTX);
+		/* // clear buffer */
+		/* packetbuf_clear(); */
+	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == BUF_JAM || mode == PN || mode == TX2) {
 		rt.ptr = NULL; 		// stop rtimer
-		reset_transmitter();
 	}
+	reset_transmitter();
   mode = to;
   switch(mode) {
   case RX: 
@@ -282,8 +308,6 @@ start_mode(int to)
     break;
 
   case TX:
-#define AUTOACK (1 << 4)
-#define ADR_DECODE (1 << 11)
 		seqno = 0;
 		/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt */
 		/* Turn off automatic packet acknowledgment and address decoding. */
@@ -324,14 +348,9 @@ start_mode(int to)
 		break;
 
   case PN: 
-		/* hex_seq[0] = len_hdr; */
-		/* ++hex_seq[0]; */
-		
-		pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_payload);
-		/* hex_seq[1]++; */
-		/* for(i = 0; i < sizeof(hex_seq); i+=sizeof(hex_seq)) { */
-		/* 	memcpy(&txfifo_data[i], size); */
-		/* } */
+		pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
+		/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
+
 		CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
 		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
 		send_carrier(mode); 
@@ -340,72 +359,39 @@ start_mode(int to)
 		break;
 
   case OFF:
-		reset_transmitter();
-		/* (void)cc2420_off(); */
+		strobe(CC2420_SRFOFF);
 		printf("Radio Off mode\n"); 
 		break;
 
 	case JAM:
-		reset_transmitter();
-		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
-		CC2420_CLEAR_FIFOP_INT();
+		/* reset_transmitter(); */
+		/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt */
+		/* CC2420_CLEAR_FIFOP_INT(); */
 		flushrx();
 #if ENABLE_CCA_INTERRUPT
-		CC2420_CLEAR_CCA_INT();
-		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
+		/* CC2420_CLEAR_CCA_INT(); */
+		/* CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt */
 #endif
 		jam_ena = 1;
+
+		/* TEST: turn off AUTOCRC in order to send frame headers as normal packets */
+		reg = getreg(CC2420_MDMCTRL0);
+		reg &= ~AUTOCRC;
+		setreg(CC2420_MDMCTRL0, reg);
+
+		/* Raise FIFOP interrupt immediately after the length byte, i.e. the 1st byte into RXFIFO, is received */
+		reg = getreg(CC2420_IOCFG0);
+		setreg(CC2420_IOCFG0, SETFD(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB));
+
+		/* Pre-fill TX FIFO for next jam */
+		CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data));
+
 		strobe(CC2420_SRXON);
 
 		printf("Jam mode\n");
-		printf("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
-		printf("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
-		break;
+		PRINTF("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
+		PRINTF("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
 
-	case SNIFF:
-		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt
-		CC2420_CLEAR_FIFOP_INT();
-		flushrx();
-#if ENABLE_CCA_INTERRUPT
-		CC2420_CLEAR_CCA_INT();
-		CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt
-#elif ENABLE_UNBUFFERED_MODE
-		reg = getreg(CC2420_MDMCTRL1);
-		reg &= ~RX_MODE_BV;
-		reg |= RX_MODE_1;
-		setreg(CC2420_MDMCTRL1, reg);
-		CC2420_ENABLE_FIFOP_INT();
-#endif
-
-		printf("Sniff mode\n");
-		break;
-
-	case SERIAL_JAM:
-		/* Periodic tx */
-		// Test: CCA interrupt might cause extra delay
-		CC2420_DISABLE_CCA_INT();
-		CC2420_CLEAR_CCA_INT();
-
-		/* Set FIFO pin as serial data output */
-		CC2420_FIFO_PORT(DIR) |= BV(CC2420_FIFO_PIN);
-		/* /\* Set FIFOP pin to falling edge interrupt  *\/ */
-		/* CC2420_FIFOP_PORT(IES) |= BV(CC2420_FIFOP_PIN); */
-		/* Set FIFOP pin to rising edge interrupt  */
-		CC2420_FIFOP_PORT(IES) &= ~BV(CC2420_FIFOP_PIN);
-		CC2420_CLEAR_FIFOP_INT();
-				
-				 //, by enabling TX mode 1 and FIFOP interrupt*/
-		reg = getreg(CC2420_MDMCTRL1);
-		reg &= ~(TX_MODE_BV & RX_MODE_BV);
-		reg |= TX_MODE_1 | RX_MODE_1;
-		setreg(CC2420_MDMCTRL1, reg);
-		reg = getreg(CC2420_MDMCTRL1);
-		/* printf("MDMCTRL1 = 0x%04x\n", reg); */
-		
-		/* Send Droplet */
-		send_len(&rt, (void *)1);
-
-    printf("Serial jamming mode\n");
 		break;
 
 	case BUF_JAM:
@@ -420,13 +406,6 @@ start_mode(int to)
 		rtimer_set(&rt, RTIMER_NOW() + rtimer_interval - 4 + (random_rand()%9) , 0, send_len_buf, (void *)1);
 
     printf("Buffered jamming mode\n");
-		break;
-
-	case HSSD:
-		printf("HSSD mode\n");
-		// Disable interrupts
-		CC2420_DISABLE_CCA_INT();
-		CC2420_DISABLE_FIFOP_INT();
 		break;
 
   default:
@@ -458,7 +437,9 @@ PROCESS_THREAD(test_process, ev, data)
 	printf("F_CPU %lu CLOCK_CONF_SECOND %lu RTIMER_CONF_SECOND %u\n", F_CPU, CLOCK_CONF_SECOND, RTIMER_SECOND);
 
 	// pre-fill pseudo random data for TXFIFO
-	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_payload);
+	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
+	/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
+
 	char dbuf[300];
 	char *dbuf_ptr = dbuf;
 	for(i = 0;i < 128;++i){
@@ -466,6 +447,7 @@ PROCESS_THREAD(test_process, ev, data)
 	}
 	printf("txfifo: %s\n", dbuf);
 
+	tx_interval = TX_INTERVAL;
 	payload_len = PAYLOAD_LEN;
 	max_tx_packets = MAX_TX_PACKETS;
 
@@ -489,12 +471,12 @@ PROCESS_THREAD(test_process, ev, data)
 
 	/* Change channel */
   cc2420_set_channel(CHANNEL);
-	cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL);
+	cc2420_set_txpower(TXPOWER_LEVEL);
 
 	etimer_set(&et, CLOCK_SECOND *1);
 	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
-  printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, DEFAULT_TXPOWER_LEVEL);
+  printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, TXPOWER_LEVEL);
 
   /* initialize transceiver mode */
   start_mode(0);
@@ -566,7 +548,7 @@ PROCESS_THREAD(test_process, ev, data)
 					buf_ptr[3] = 0xFF;
 					buf_ptr[4] = 0xFF;
 					buf_ptr[5] = 0x12; // dest. rimeaddr lower byte
-					buf_ptr[6] = 0x00; // dest. rimeaddr higher byte
+					buf_ptr[6] = 0x02; // dest. rimeaddr higher byte
 					for(i = MHR_LEN;i < payload_len;++i) {
 						buf_ptr[i] = (uint8_t)random_rand();
 					}
@@ -594,13 +576,6 @@ PROCESS_THREAD(test_process, ev, data)
 					lna = getreg(CC2420_AGCCTRL) & 0x0003;
 				}
 				printf("rssi = %d, lna = %u\n", rssi, lna);
-      } else if(mode == SERIAL_JAM) {
-				/* Test: set first transmitted bit = 1 */
-				CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
-				/* Start serial data transmission */
-				CC2420_CLEAR_FIFOP_INT();
-				CC2420_ENABLE_FIFOP_INT();
-				strobe(CC2420_STXON);
 			} else if(mode == MOD || mode == PN || BUF_JAM) {
 				etimer_stop(&et);
 				rt.ptr = NULL; 		// stop rtimer

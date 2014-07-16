@@ -714,20 +714,57 @@ cc2420_set_pan_addr(unsigned pan,
   RELEASE_LOCK();
 }
 /*---------------------------------------------------------------------------*/
+// Sending a Droplet header followed by a short 802.15.4 MAC header segment as jam signal
+					// FCF: frame type=2 (ACK), security=0, frame pending=0, ack req=0, panid compression=0, reserved=0
+					/* buf[0] = 0x01<<0 | 0<<3 | 0<<4 | 1<<5 | 0<<6 | 0x0<<7 | 2<<10 | 1<<12 | 0<<14; */
+	/* LEN + FCF[0] */
+/* const uint8_t jam_data[2] = {5, 0x02<<0|0<<3|0<<4|0<<5|0<<6|0x0<<7}; */
+// ACK frame for seq=0, manually appended CRC16 (CRC-CCITT (kermit)) http://www.lammertbies.nl/comm/info/crc-calculation.html
+/* const uint8_t jam_data[6] = {5, 0x02, 0x00, 0x00, 0xB8, 0xB5}; */
+// ACK frame for seq=254, manually appended CRC16 (CRC-CCITT (kermit)) 
+const uint8_t jam_data[6] = {5, 0x02, 0x00, 0xFE, 0x49, 0xAB};
+// DATA frame for non-present dst|src address fields, seq=254, manually appended CRC16 (CRC-CCITT (kermit)) 
+/* const uint8_t jam_data[6] = {5, 0x01, 0x00, 0xFE, 0x2D, 0x44}; */
+
 static void
-send_jam(void)
+send_jam(int len)
 {
-	leds_on(LEDS_BLUE);
-	/* unsigned reg = getreg(CC2420_MDMCTRL1); */
-	/* setreg(CC2420_MDMCTRL1, (reg & 0xFFF3) | (3 << 2)); */
-	setreg(CC2420_MDMCTRL1, 0x064C);
-	strobe(CC2420_STXON);
-	/* clock_delay(255); */
-	clock_delay(16*4*F_CPU/1000000);
-  /* setreg(CC2420_MDMCTRL1, reg & 0xFFF0); */
-  setreg(CC2420_MDMCTRL1, 0x0640);
-  strobe(CC2420_SRXON);
-	leds_off(LEDS_BLUE);
+	/* leds_on(LEDS_BLUE); */
+	/* /\* unsigned reg = getreg(CC2420_MDMCTRL1); *\/ */
+	/* /\* setreg(CC2420_MDMCTRL1, (reg & 0xFFF3) | (3 << 2)); *\/ */
+	/* setreg(CC2420_MDMCTRL1, 0x064C); */
+	/* strobe(CC2420_STXON); */
+	/* /\* clock_delay(255); *\/ */
+	/* clock_delay(16*4*F_CPU/1000000); */
+  /* /\* setreg(CC2420_MDMCTRL1, reg & 0xFFF0); *\/ */
+  /* setreg(CC2420_MDMCTRL1, 0x0640); */
+  /* strobe(CC2420_SRXON); */
+	/* leds_off(LEDS_BLUE); */
+
+#define TICKS_PER_DELAY 4 // cmp #0; jne; add (-1), r15;
+		// to get len bytes delay in us: x = len (bytes) * 8 (bits/byte) *4 (us/bit) = len * 32
+		// to get x us delay in ticks: ticks = x * F_CPU (ticks/s) / 1000000 (us/s) = len * 32 * F_CPU/100000
+		// to get tic delays in n clock delays: n = ticks / N (ticks/clock_delay) = len * 32 * F_CPU / TICKS_PER_DELAY / 1000000
+	clock_delay((len*32+69-53)*((F_CPU/1000000)/TICKS_PER_DELAY));
+	asm("nop");asm("nop");asm("nop");asm("nop");
+
+		/* Transmit */
+		strobe(CC2420_STXON);
+
+		/* We wait until underflow has occured, which should take at least
+			 tx touraround time (128 us) + 4 preamble bytes + SFD byte (5*32=160 us) = 288 us */
+		/* BUSYWAIT_UNTIL((status() & BV(CC2420_TX_UNDERFLOW)), RTIMER_SECOND / 2000); */
+
+		/* Flush TX FIFO */
+		/* strobe(CC2420_SFLUSHTX); */
+
+		/* TEST: full packet transmitted (no underflow), wait until transmission completed */
+		BUSYWAIT_UNTIL(!(status() & BV(CC2420_TX_ACTIVE)), RTIMER_SECOND/1000);
+		if (status() & BV(CC2420_TX_UNDERFLOW))
+				strobe(CC2420_SFLUSHTX);
+
+		/* Pre-fill TX FIFO for next jam */
+		CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data));
 }
 
 int 
@@ -784,20 +821,19 @@ cc2420_cca_interrupt(void)
 	return 1;
 	
 #else
-	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
-	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
-	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
 	
-	static long int count = 0;
 	/* rtimer_clock_t start, end; */
 	uint8_t len;
 	
-	count++;
-	/* while(!FIFO_IS_1) {;} // wait till first byte read */
+	/* while(!CC2420_FIFO_IS_1) {;} // wait till first byte read */
   if(!CC2420_FIFO_IS_1) {
 		/* If FIFO is 0, there is no packet in the RXFIFO. */
 		// NOTE: delay time depends on previous processing delay in ISR
-		clock_delay(22*F_CPU/1000000/4);
+		/* clock_delay(22*F_CPU/1000000/4); */
+		clock_delay(22*(F_CPU/1000000/TICKS_PER_DELAY));
 	}
   if(CC2420_FIFO_IS_1) {
 		getrxbyte(&len);
@@ -811,20 +847,20 @@ cc2420_cca_interrupt(void)
 		return 1;
 	}
 	
-	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
-	GPIO1_PORT(OUT) |= BV(GPIO1_PIN);
-	GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN);
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) |= BV(GPIO1_PIN); */
+	/* GPIO1_PORT(OUT) &= ~BV(GPIO1_PIN); */
 
-	if(jam_ena && decision(count, len, NULL) > 0) {
-		send_jam();
-		flushrx();
-		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %u !", count, clock_seconds(), len);
+	/* if(jam_ena && decision(len, NULL) > 0) { */
+	if(jam_ena) {// bypass decision to ensure constant latency
+		send_jam(len);
+		snprintf(info_str[info_str_index], sizeof(info_str), "%lu %u !", clock_seconds(), len);
 	} else {
 		/* read remaining payload bytes */
 		/* clock_delay(32*len/2*3); // 32 us per byte, 0.77 us per delay tick */
 		while(CC2420_SFD_IS_1) {;} // wait until reception finishes
 		FASTSPI_READ_FIFO_GARBAGE(len);
-		snprintf(info_str[info_str_index], sizeof(info_str), "%ld %lu %u", count, clock_seconds(), len);
+		snprintf(info_str[info_str_index], sizeof(info_str), "%lu %u", clock_seconds(), len);
 	}
 	process_post(&cc2420_debug_process, PROCESS_EVENT_MSG, info_str[info_str_index]);
 	info_str_index = info_str_index == INFO_STR_NUM - 1 ? 0 : info_str_index+1;
@@ -917,8 +953,19 @@ cc2420_interrupt(void)
 	/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
 	/* GPIO2_PORT(OUT) |= BV(GPIO2_PIN); */
 	/* CC2420_CLEAR_CCA_INT(); */
-
+	
+	// TEST: in JAM mode, read len and send jam, then flush RXFIFO 
+	if (jam_ena) {
+		uint8_t len;
+		getrxbyte(&len);
+		send_jam(len);
+		/* send_jam(20); // TEST ONLY: cheating by bypassing SPI access altogether to eliminate time jitter with known frame length */
+		flushrx();
+		CC2420_CLEAR_FIFOP_INT();
+	} else {
 	process_poll(&cc2420_process);
+	}
+	/* process_poll(&cc2420_process); */
 
 #if CC2420_TIMETABLE_PROFILING
   timetable_clear(&cc2420_timetable);

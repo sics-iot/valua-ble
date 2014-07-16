@@ -57,6 +57,8 @@
 
 extern long int sum_rssi;
 extern long unsigned sum_lqi;
+extern int min_rssi, max_rssi;
+extern unsigned min_lqi, max_lqi;
 /*---------------------------------------------------------------------------*/
 static void
 send_packet(mac_callback_t sent, void *ptr)
@@ -103,9 +105,13 @@ packet_input(void)
 		/* 	printf("*"); */
 		/* } */
 		/* printf("\t"); */
-		PRINTF("RSSI %d LQI %u\n", packetbuf_attr(PACKETBUF_ATTR_RSSI), packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY));
+		PRINTF(" RSSI %d LQI %u\n", packetbuf_attr(PACKETBUF_ATTR_RSSI), packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY));
 		sum_rssi +=  (long int)((int16_t)packetbuf_attr(PACKETBUF_ATTR_RSSI));
 		sum_lqi +=  packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY);
+		min_rssi = (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) < min_rssi ? (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) : min_rssi;
+		max_rssi = (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) > max_rssi ? (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) : max_rssi;
+		min_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) < min_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : min_lqi;
+		max_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) > max_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : max_lqi;
 	}
 }
 /*---------------------------------------------------------------------------*/

@@ -70,11 +70,7 @@ ISR(CC2420_IRQ, cc2420_port1_interrupt)
 		/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
 		/* GPIO2_PORT(OUT) |= BV(GPIO2_PIN); */
 		/* GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN); */
-		if(mode == SERIAL_JAM) {
-			if(cc2420_fifop_interrupt()) {
-				RETURN;
-			}
-		} else if (cc2420_interrupt()) {
+		if (cc2420_interrupt()) {
 				RETURN;
 		}
 	}

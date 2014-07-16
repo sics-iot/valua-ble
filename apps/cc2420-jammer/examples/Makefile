@@ -1,4 +1,4 @@
-CONTIKI = ../../../../../contiki
+CONTIKI = ../../../../contiki
 ifndef TARGET
 TARGET=z1
 endif

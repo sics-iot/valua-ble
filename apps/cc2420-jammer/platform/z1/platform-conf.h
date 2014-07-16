@@ -47,7 +47,7 @@
 #define PLATFORM_HAS_BUTTON 1
 
 /* CPU target speed in Hz */
-#define F_CPU 8000000uL /* 8MHz by default */
+#define F_CPU 16000000uL /* 8MHz by default */
 //Enric #define F_CPU 3900000uL /*2457600uL*/
 
 /* Our clock resolution, this is the same as Unix HZ. */
@@ -173,7 +173,7 @@ typedef unsigned long off_t;
 
 /* #define CC2420_CONF_SYMBOL_LOOP_COUNT 1302	/\* 326us msp430X @ 8MHz *\/ */
 /* #define CC2420_CONF_SYMBOL_LOOP_COUNT 2604	/\* 326us msp430X @ 16MHz *\/ */
-#define CC2420_CONF_SYMBOL_LOOP_COUNT (F_CPU*326/2/1000000)
+#define CC2420_CONF_SYMBOL_LOOP_COUNT (F_CPU/1000000*326/2)
 
 /* P1.2 - Input: FIFOP from CC2420 */
 #define CC2420_FIFOP_PORT(type)   P1##type

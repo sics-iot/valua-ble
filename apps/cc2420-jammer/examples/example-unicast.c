@@ -55,11 +55,21 @@
 #include "commands.h"
 
 #define CHANNEL 20
-#define DEFAULT_TXPOWER_LEVEL 7
+#define TXPOWER_LEVEL 7
 
-#define TX_INTERVAL CLOCK_SECOND / 2
-#define MAX_TX_PACKETS 100
+#define TX_INTERVAL (CLOCK_SECOND / 2)
+#define MAX_TX_PACKETS 10
 #define PAYLOAD_LEN (43-17) // contikimac SHORTEST_PACKET_SIZE - rime header size
+
+#ifndef TX_INTERVAL
+#define TX_INTERVAL DEFAULT_TX_INTERVAL
+#endif
+#ifndef MAX_TX_PACKETS
+#define MAX_TX_PACKETS DEFAULT_MAX_TX_PACKETS
+#endif
+#ifndef PAYLOAD_LEN
+#define PAYLOAD_LEN DEFAULT_PAYLOAD_LEN
+#endif
 
 uint16_t seqno;
 
@@ -78,9 +88,9 @@ sent_uc(struct unicast_conn *c, int status, int num_tx)
 static void
 recv_uc(struct unicast_conn *c, const rimeaddr_t *from)
 {
-  /* printf("from %d.%d: %s\n",  */
+  /* printf("from %d.%d: %s\n", */
 	/* 			 from->u8[0], from->u8[1], (char *)packetbuf_dataptr()); */
-  printf("%s\t", 
+  printf("%s\t",
 				 (char *)packetbuf_dataptr());
 }
 
@@ -116,10 +126,19 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
-	/* Change channel */
-  cc2420_set_channel(CHANNEL);
+	/* Set */
+	tx_interval = TX_INTERVAL;
+	payload_len = PAYLOAD_LEN;
+	max_tx_packets = MAX_TX_PACKETS;
 
-	cc2420_set_txpower(DEFAULT_TXPOWER_LEVEL);
+	/* Change channel and Tx power */
+  cc2420_set_channel(CHANNEL);
+	cc2420_set_txpower(TXPOWER_LEVEL);
+
+	etimer_set(&et, CLOCK_SECOND *1);
+	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+
+  printf("Process starts: channel = %d, txpower level = %u\n", CHANNEL, TXPOWER_LEVEL);
 
   unicast_open(&uc, 146, &unicast_callbacks);
 
@@ -135,11 +154,13 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 				snprintf(str, sizeof(str), "%u", seqno);
 
 				packetbuf_copyfrom(str, payload_len);
-				addr.u8[0] = 1;
+				addr.u8[0] = 101;
 				addr.u8[1] = 0;
-				if(!rimeaddr_cmp(&addr, &rimeaddr_node_addr)) {
+				if(rimeaddr_cmp(&addr, &rimeaddr_node_addr)) {
 					unicast_send(&uc, &addr);
 					++seqno;
+				} else {
+					printf("^");
 				}
 			} else {
 				etimer_stop(&et);
@@ -159,35 +180,3 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 
   PROCESS_END();
 }
-
-/* const struct command command_table[] =	{ */
-/* 	/\* {'n', next_mode}, *\/ */
-/* 	/\* {'p', previous_mode}, *\/ */
-/* 	{'e', reboot}, */
-/* 	{'u', power_up}, */
-/* 	{'d', power_down}, */
-/* 	{'h', tx_frequency_up}, */
-/* 	{'l', tx_frequency_down}, */
-/* 	/\* {'H', rtimer_frequency_up}, *\/ */
-/* 	/\* {'L', rtimer_frequency_down}, *\/ */
-/* 	{'r', rssi}, */
-/* 	{'+', channel_up}, */
-/* 	{'-', channel_down}, */
-/* 	{'>', frequency_up}, */
-/* 	{'<', frequency_down}, */
-/* 	{'c', cca_mux_up}, */
-/* 	{'s', sfd_mux_up}, */
-/* 	{'v', view_rx_statistics}, */
-/* 	{'V', view_failed_rx_statistics}, */
-/* 	{'w', view_tx_power_level}, */
-/* 	{'m', tx_packets_up}, */
-/* 	{'f', tx_packets_down}, */
-/* 	/\* {'a', this_mode_again}, *\/ */
-/* 	{'Y', payload_len_up}, */
-/* 	{'y', payload_len_down}, */
-/* 	{'g', agc_lnamix_gainmode_up}, */
-/* 	{'G', agc_vga_gain_up}, */
-/* 	{'D', debug_hssd}, */
-/* 	{'A', debug_analog}, */
-/* }; */
-
