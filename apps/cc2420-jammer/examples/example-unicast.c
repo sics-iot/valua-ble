@@ -61,17 +61,19 @@
 #define MAX_TX_PACKETS 10
 #define PAYLOAD_LEN (43-17) // contikimac SHORTEST_PACKET_SIZE - rime header size
 
-#ifndef TX_INTERVAL
-#define TX_INTERVAL DEFAULT_TX_INTERVAL
-#endif
-#ifndef MAX_TX_PACKETS
-#define MAX_TX_PACKETS DEFAULT_MAX_TX_PACKETS
-#endif
-#ifndef PAYLOAD_LEN
-#define PAYLOAD_LEN DEFAULT_PAYLOAD_LEN
-#endif
-
+int mode;
+clock_time_t tx_interval = TX_INTERVAL;
+unsigned max_tx_packets = MAX_TX_PACKETS;
+int payload_len = PAYLOAD_LEN;
+struct etimer et;
 uint16_t seqno;
+
+const struct variable user_variable_list[] = {
+	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
+	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
+	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
+	{'0', NULL, 1, NULL, -1, -1},
+};
 
 /*---------------------------------------------------------------------------*/
 PROCESS(example_unicast_process, "Example unicast");
@@ -116,8 +118,6 @@ restart(int tx_freq)
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(example_unicast_process, ev, data)
 {
-	static char last_ch;
-
   PROCESS_EXITHANDLER(unicast_close(&uc);)
     
   PROCESS_BEGIN();
@@ -167,14 +167,8 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 				printf("Finished sending %u packets\n", seqno);
 			}
     } else if(ev == serial_line_event_message) {
-      char ch = *(char *)data;
-      if(ch == '\0') {
-				ch = last_ch;
-			}
-			last_ch = ch;
-
-			/* Single character command handlers */
-			do_command(ch);
+			/* Command handlers */
+			do_command((char *)data);
 		}
   }
 

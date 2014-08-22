@@ -31,13 +31,6 @@
 #define CCAMUX_BV (31<<0)
 #define SFDMUX_BV (31<<5)
 
-int mode;
-clock_time_t tx_interval;;
-int max_tx_packets;
-int payload_len;
-struct etimer et;
-struct rtimer rt;
-rtimer_clock_t rtimer_interval = DEFAULT_RTIMER_INTERVAL;
 long int sum_rssi;
 long unsigned sum_lqi;
 int min_rssi = 15, max_rssi = -55;
@@ -50,6 +43,8 @@ extern int cc2420_packets_seen, cc2420_packets_read;
 
 unsigned getreg(enum cc2420_register regname);
 void setreg(enum cc2420_register regname, unsigned value);
+uint16_t cc2420_get_frequency(void);
+int cc2420_set_frequency(uint16_t f);
 
 static void (*callback)(int v);
 
@@ -92,38 +87,6 @@ power_down(void)
 	}
 	printf("tx power = %u\n", cc2420_get_txpower());
 }
-/*---------------------------------------------------------------------------*/
-static void
-tx_frequency_up(void)
-{
-	tx_interval /= 2;
-	printf("tx frequency = %lu\n", CLOCK_SECOND / tx_interval);
-}
-/*---------------------------------------------------------------------------*/
-static void
-tx_frequency_down(void)
-{
-	tx_interval *= 2;
-	printf("tx frequency = %lu\n", CLOCK_SECOND / tx_interval);
-}
-/*---------------------------------------------------------------------------*/
-static void
-rtimer_frequency_up(void)
-{
-	/* rtimer_interval /= 2; */
-	--rtimer_interval;
-	printf("rtimer interval %u (%u Hz)\n", rtimer_interval,
-				 (RTIMER_SECOND+rtimer_interval/2) / rtimer_interval);
-}
-/*---------------------------------------------------------------------------*/
-static void
-rtimer_frequency_down(void)
-{
-	rtimer_interval *= 2;
-	printf("rtimer interval %u (%u Hz)\n", rtimer_interval,
-				 (RTIMER_SECOND+rtimer_interval/2) / rtimer_interval);
-}
-/*---------------------------------------------------------------------------*/
 static void
 rssi(void)
 {
@@ -233,43 +196,9 @@ view_tx_power_level(void){
 }
 /*---------------------------------------------------------------------------*/
 static void
-tx_packets_up(void)
-{
-	// send More packets
-	/* max_tx_packets += 100; */
-	max_tx_packets *= 10;
-	printf("max tx packets = %d\n", max_tx_packets);
-}
-/*---------------------------------------------------------------------------*/
-static void
-tx_packets_down(void)
-{
-	// send Fewer packets
-	/* max_tx_packets -= 100; */
-		max_tx_packets /= 10;
-	printf("max tx packets = %d\n", max_tx_packets);
-}
-/*---------------------------------------------------------------------------*/
-static void
 this_mode_again(void)
 {
 	/* start_mode(mode); */
-}
-/*---------------------------------------------------------------------------*/
-static void
-payload_len_up(void)
-{
-	/* payload_len++; */
-	payload_len+=10;
-	printf("payload len =%d\n", payload_len);
-}
-/*---------------------------------------------------------------------------*/
-static void
-payload_len_down(void)
-{
-	/* payload_len--; */
-	payload_len-=10;
-	printf("payload len =%d\n", payload_len);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -399,13 +328,6 @@ reverse_syncword(void)
 }
 /*---------------------------------------------------------------------------*/
 static void
-len_hdr_up(void)
-{
-	len_hdr = (len_hdr+1) % 128;
-	printf("len_hdr = %u\n", len_hdr);
-}
-/*---------------------------------------------------------------------------*/
-static void
 preamble_size_down(void)
 {
 #define PREAMBLE_LENGTH_MSB 3
@@ -418,62 +340,63 @@ preamble_size_down(void)
 }
 /*---------------------------------------------------------------------------*/
 const struct command command_table[] =	{
-	{'n', next_mode},
-	{'p', previous_mode},
-	{'e', reboot},
-	{'u', power_up},
-	{'d', power_down},
-	{'h', tx_frequency_up},
-	{'l', tx_frequency_down},
-	{'H', rtimer_frequency_up},
-	{'L', rtimer_frequency_down},
-	{'r', rssi},
-	{'+', channel_up},
-	{'-', channel_down},
-	{'>', frequency_up},
-	{'<', frequency_down},
-	{'c', cca_mux_up},
-	{'s', sfd_mux_up},
-	{'v', view_rx_statistics},
-	{'V', view_failed_rx_statistics},
-	{'w', view_tx_power_level},
-	{'m', tx_packets_up},
-	{'f', tx_packets_down},
-	{'a', this_mode_again},
-	{'Y', payload_len_up},
-	{'y', payload_len_down},
-	{'g', agc_lnamix_gainmode_up},
-	{'G', agc_vga_gain_up},
-	{'D', debug_hssd},
-	{'A', debug_analog},
-	{'P', reverse_phase},
-	{'S', reverse_syncword},
-	{'R', len_hdr_up},
-	{'E', preamble_size_down},
-	{'\0', NULL},
+	{'n', '\0', next_mode},
+	{'p', '\0', previous_mode},
+	{'e', '\0', reboot},
+	{'u', '\0', power_up},
+	{'d', '\0', power_down},
+	{'r', '\0', rssi},
+	{'+', '\0', channel_up},
+	{'-', '\0', channel_down},
+	{'>', '\0', frequency_up},
+	{'<', '\0', frequency_down},
+	{'c', '\0', cca_mux_up},
+	{'s', '\0', sfd_mux_up},
+	{'v', '\0', view_rx_statistics},
+	{'V', '\0', view_failed_rx_statistics},
+	{'w', '\0', view_tx_power_level},
+	{'a', '\0', this_mode_again},
+	{'g', '\0', agc_lnamix_gainmode_up},
+	{'G', '\0', agc_vga_gain_up},
+	{'D', '\0', debug_hssd},
+	{'A', '\0', debug_analog},
+	{'P', '\0', reverse_phase},
+	{'S', '\0', reverse_syncword},
+	{'E', '\0', preamble_size_down},
+	{'\0', '\0', NULL},
 };
 
 void
-do_command(char ch)
+do_command(char *s)
 {
-	if(ch >= '0' && ch <= '9' && callback != NULL) {
-		if(callback != NULL) {
-			callback(ch - '0');
-		} else {
-			printf("no callback found\n");
-		}
-		return;
+	static char last_cmd[2];
+	static char last_last_cmd[2];
+
+	if(s[0] == '\0') {
+		s = &last_cmd[0];
+	} else if(s[0] == '~') {
+		s = &last_last_cmd[0];
 	} else {
-	const struct command *ptr = &command_table[0];
-	while(ptr->f != NULL) {
-		if(ch == ptr->ch) {
-			ptr->f();
-			return;
-		} 
-		++ptr;
+		strncpy(last_last_cmd, last_cmd, sizeof(last_last_cmd));
+		strncpy(last_cmd, s, sizeof(last_cmd));
 	}
-	
-	printf("unkown command: %c\n", ch);
+
+	if(s[0] >= '0' && s[0] <= '9' && callback != NULL) {
+		callback(s[0] - '0');
+		return;
+	}
+	else if(s[1] != '\0' && (s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\''))
+		var_update(s[0], s[1]);
+	else {
+		const struct command *ptr = &command_table[0];
+		while(ptr->f != NULL) {
+			if(s[0] == ptr->ch1) {
+				ptr->f();
+				return;
+			}
+			++ptr;
+		}
+		printf("unkown command: %c\n", s[0]);
 	}
 }
 
@@ -483,3 +406,37 @@ commands_set_callback(void (*f)(int))
 	callback = f;
 }
 
+void
+var_update(char op, char var)
+{
+	const struct variable *vp = &user_variable_list[0];
+	uint8_t *u8;
+	uint16_t *u16;
+	uint32_t *u32;
+	while(vp->ch != '\0') {
+		if(vp->ch == var) {
+			switch(vp->width) {
+			case 1:
+				u8 = &(vp->n->u8);
+				OP(*u8, op);
+				*u8 = (*u8) % (vp->ceiling - vp->floor + 1);
+				printf("%s=%u\n", vp->long_name, *u8);
+				break;
+			case 2:
+				u16 = &(vp->n->u16);
+				OP(*u16, op);
+				*u16 = (*u16) % (vp->ceiling - vp->floor + 1);
+				printf("%s=%u\n", vp->long_name, *u16);
+				break;
+			case 4:
+				u32 = &(vp->n->u32);
+				OP(*u32, op);
+				*u32 = (*u32) % (vp->ceiling - vp->floor + 1);
+				printf("%s=%lu\n", vp->long_name, *u32);
+				break;
+			default:;
+			}
+		}
+		vp++;
+	}
+}

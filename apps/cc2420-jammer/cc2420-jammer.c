@@ -113,27 +113,38 @@
 #define TX_INTERVAL (CLOCK_SECOND / 32)
 #define MAX_TX_PACKETS 10
 #define PAYLOAD_LEN 20
-
-#ifndef TX_INTERVAL
-#define TX_INTERVAL DEFAULT_TX_INTERVAL
-#endif
-#ifndef MAX_TX_PACKETS
-#define MAX_TX_PACKETS DEFAULT_MAX_TX_PACKETS
-#endif
-#ifndef PAYLOAD_LEN
-#define PAYLOAD_LEN DEFAULT_PAYLOAD_LEN
-#endif
+/* exprimental value used to occupy near full bandwidth, assuming RIMTER_SECOND = 4096 * N */
+/* "SFD gap" = 298 us out of 4395 us Droplet interval => actual free air time = 298 - 160 (preamble+SFD) = 138 us => free bandwidth = 138/4395 = 3.1% */
+/* #define DEFAULT_RTIMER_INTERVAL (RTIMER_SECOND / 128) */
+#define RTIMER_INTERVAL ((RTIMER_SECOND + (225/2)) / 225 )
 
 extern int jam_ena;
 extern const uint8_t jam_data[6];
 
-const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
+int mode;
+clock_time_t tx_interval = TX_INTERVAL;
+unsigned max_tx_packets = MAX_TX_PACKETS;
+int payload_len = PAYLOAD_LEN;
+rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
+
+struct etimer et;
+struct rtimer rt;
 uint16_t seqno;
-static uint8_t hex_seq[] = {127, 1, 0x06, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
+/* static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting. */
+uint8_t hex_seq[] = {7, 1, 0x00, 0xA7}; // short length 
+// TODO: command to alternate preamble len in hex_seq: 0x0, 0x00, 0x000
 static uint8_t txfifo_data[128];
 
-void
-do_command(char ch);
+const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
+const struct variable user_variable_list[] = {
+	{'l', (union number*)&len_hdr, sizeof(len_hdr), "len_hdr", 0, 127},
+	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
+	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
+	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
+	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
+	{'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127},
+	{'0', NULL, 1, NULL, -1, -1},
+};
 
 PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
@@ -168,6 +179,7 @@ send_len(struct rtimer *t, void *ptr)
 		}
 }
 /*---------------------------------------------------------------------------*/
+/* Periodic Droplet transmission */
 void
 send_len_buf(struct rtimer *t, void *ptr)
 {
@@ -262,8 +274,8 @@ inc_first_byte(uint8_t *src)
 {
 	(*(src+1))++;
 }
-
 /*---------------------------------------------------------------------------*/
+
 void
 start_mode(int to)
 {
@@ -425,7 +437,6 @@ PROCESS_THREAD(test_process, ev, data)
 	int i;
 	int errno;
 	const struct radio_driver *d;
-	static char last_ch;
 	static uint16_t buf[127/2+1];
 	static uint8_t *buf_ptr = (uint8_t *)buf;
 
@@ -446,10 +457,6 @@ PROCESS_THREAD(test_process, ev, data)
 		dbuf_ptr += sprintf(dbuf_ptr, "%02x", txfifo_data[i]);
 	}
 	printf("txfifo: %s\n", dbuf);
-
-	tx_interval = TX_INTERVAL;
-	payload_len = PAYLOAD_LEN;
-	max_tx_packets = MAX_TX_PACKETS;
 
 	/* node_id_burn(101); */
 
@@ -584,14 +591,18 @@ PROCESS_THREAD(test_process, ev, data)
 							 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
 			}
     } else if(ev == serial_line_event_message) {
-      char ch = *(char *)data;
-      if(ch == '\0') {
-				ch = last_ch;
-			}
-			last_ch = ch;
+			/* char *cmd = (char *)data; */
+      /* if(cmd[0] == '\0') { */
+			/* 	cmd = &last_cmd[0]; */
+			/* } else if(cmd[0] == '~') { */
+			/* 	cmd = &last_last_cmd[0]; */
+			/* } else { */
+			/* 	strncpy(last_last_cmd, last_cmd, sizeof(last_last_cmd)); */
+			/* 	strncpy(last_cmd, cmd, sizeof(last_cmd)); */
+			/* } */
 
-			/* Single character command handlers */
-			do_command(ch);
+			/* Command handlers */
+			do_command((char *)data);
     } else if(ev == sensors_event && data == &button_sensor) {
       start_mode((mode + 1) % NUM_MODES);
     }
