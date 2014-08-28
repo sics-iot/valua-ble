@@ -3,11 +3,11 @@
 
 #define RX 0
 #define TX 1
-#define BUF_JAM 2
+#define DROPLET 2
 #define MOD 3
 #define UNMOD 4
 #define CH 5
-#define PN 6
+#define DRIZZLE 6
 #define OFF 7
 #define TX2 8
 #define JAM 9

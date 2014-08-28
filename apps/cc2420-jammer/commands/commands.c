@@ -9,25 +9,6 @@
 
 #include "commands.h"
 
-// Field Vector (FV) generator macro based on user defined MSB and LSB
-#define FV(MSB, LSB) \
-	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
-
-// Field value (FVAL) generator macro
-#define FVAL(REGVAL, MSB, LSB) \
-	((REGVAL & FV(MSB, LSB)) >> LSB)
-
-// Set Field macro
-#define SETFD(REGVAL, FVAL, MSB, LSB) \
-	((REGVAL & ~FV(MSB, LSB)) | (FVAL << LSB))
-
-#define FDS(FVAL, LSB) \
-	((FVAL) << (LSB))
-
-// Set Fields
-#define SETFDS(REGVAL, FV, FDS)	\
-	((REGVAL & ~FV) | (FDS))
-
 #define CCAMUX_BV (31<<0)
 #define SFDMUX_BV (31<<5)
 
@@ -87,6 +68,7 @@ power_down(void)
 	}
 	printf("tx power = %u\n", cc2420_get_txpower());
 }
+/*---------------------------------------------------------------------------*/
 static void
 rssi(void)
 {
