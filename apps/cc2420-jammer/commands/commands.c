@@ -224,20 +224,21 @@ agc_vga_gain_up(void)
 static void
 debug_hssd(void)
 {
-/* #define HSSD_SRC_MSB 12 */
-/* #define HSSD_SRC_LSB 10 */
-/* 	uint16_t reg = getreg(CC2420_IOCFG1); */
-/* 	/\* uint16_t hssd_src = (reg & (0x0007 << 10)) >> 10; *\/ */
-/* 	uint16_t hssd_src = FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB); */
-/* 	hssd_src = (hssd_src + 1) % 8; */
-/* 	/\* reg = (reg & ~(0x0007 << 10)) | (hssd_src << 10); *\/ */
-/* 	/\* reg = SETFD(reg, hssd_src, HSSD_SRC_MSB, HSSD_SRC_LSB); *\/ */
-/* 	/\* reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), hssd_src << HSSD_SRC_LSB); *\/ */
-/* 	reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), FDS(hssd_src, HSSD_SRC_LSB)); */
-/* 	setreg(CC2420_IOCFG1, reg); */
-/* 	reg = getreg(CC2420_IOCFG1); */
-/* 	printf("HSSD_SRC: %u \n", FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB)); */
-	printf("Command disabled\n");
+#define HSSD_SRC_MSB 12
+#define HSSD_SRC_LSB 10
+	uint16_t reg = getreg(CC2420_IOCFG1);
+	uint16_t hssd_src = FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB);
+	hssd_src = (hssd_src + 1) % 8;
+	if(hssd_src == 0) CC2420_ENABLE_FIFOP_INT();
+	else	CC2420_DISABLE_FIFOP_INT();
+
+	// TODO: set FIFO pin as output for modes: 6: adc input 7: dac input; else set as output
+	CC2420_FIFO_PORT(DIR) &= ~BV(CC2420_FIFO_PIN);
+	
+	reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), FDS(hssd_src, HSSD_SRC_LSB));
+	setreg(CC2420_IOCFG1, reg);
+	reg = getreg(CC2420_IOCFG1);
+	printf("HSSD_SRC: %u \n", FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB));
 }
 
 /*---------------------------------------------------------------------------*/
