@@ -119,7 +119,7 @@ cca_mux_up(void)
 	uint16_t reg;
 	reg = getreg(CC2420_IOCFG1);
 	unsigned ccamux = (reg & CCAMUX_BV) >> 0;
-	ccamux = ccamux==31 ? 0 : ccamux+1;
+	ccamux = (ccamux + 1) % 32;
 	reg = (reg & (~CCAMUX_BV)) | (ccamux<<0);
 	setreg(CC2420_IOCFG1, reg);
 	printf("CCAMUX = %02u\n", ccamux);
@@ -131,7 +131,7 @@ sfd_mux_up(void)
 	uint16_t reg;
 	reg = getreg(CC2420_IOCFG1);
 	unsigned sfdmux = (reg & SFDMUX_BV) >> 5;
-	sfdmux = sfdmux==31 ? 0 : sfdmux+1;
+	sfdmux = (sfdmux + 1) % 32;
 	reg = (reg & (~SFDMUX_BV)) | (sfdmux<<5);
 	setreg(CC2420_IOCFG1, reg);
 	printf("SFDMUX = %02u\n", sfdmux);
@@ -221,6 +221,8 @@ agc_vga_gain_up(void)
 				 vga_gain);
 }
 /*---------------------------------------------------------------------------*/
+/* High speed serial debug mode */
+// 8 modes: 0: Off (default) 1: AGC status output 2: ADC I/Q output 3: down mixer I/Q output 4: na 5: na 6: adc input 7: dac input
 static void
 debug_hssd(void)
 {
@@ -315,11 +317,34 @@ preamble_size_down(void)
 {
 #define PREAMBLE_LENGTH_MSB 3
 #define PREAMBLE_LENGTH_LSB 0
-	uint8_t reg = getreg(CC2420_MDMCTRL0);
-	uint8_t preamble_len = FVAL(reg, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB);
-	preamble_len = preamble_len>0 ? preamble_len-1 : 15;
+	uint16_t reg = getreg(CC2420_MDMCTRL0);
+	uint16_t preamble_len = FVAL(reg, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB);
+	preamble_len = (preamble_len - 1) % 16;
 	setreg(CC2420_MDMCTRL0, SETFD(reg, preamble_len, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB));
 	printf("Preamble length: %u bytes\n", preamble_len+1);
+}
+/*---------------------------------------------------------------------------*/
+/* the TX DACs data source is selected by DAC_SRC according to: */
+/* 0: Normal operation (from modulator). */
+/* 1: The DAC_I_O and DAC_Q_O override values below.- */
+/* 2: From ADC, most significant bits */
+/* 3: I/Q after digital down mixing and channel filtering. */
+/* 4: Full-spectrum White Noise (from CRC) */
+/* 5: From ADC, least significant bits */
+/* 6: RSSI / Cordic Magnitude Output */
+/* 7: HSSD module. */
+static void
+dac_src_up(void)
+{
+#define DAC_SRC_MSB 14
+#define DAC_SRC_LSB 12
+	uint16_t reg = getreg(CC2420_DACTST);
+	uint16_t dac_src = FVAL(reg, DAC_SRC_MSB, DAC_SRC_LSB);
+	dac_src = (dac_src + 1) % 8;
+
+	setreg(CC2420_DACTST, SETFD(reg, dac_src, DAC_SRC_MSB, DAC_SRC_LSB));
+	printf("DAC_SRC: %u\n", dac_src);
+
 }
 /*---------------------------------------------------------------------------*/
 const struct command command_table[] =	{
@@ -341,11 +366,12 @@ const struct command command_table[] =	{
 	{'a', '\0', this_mode_again},
 	{'g', '\0', agc_lnamix_gainmode_up},
 	{'G', '\0', agc_vga_gain_up},
-	{'D', '\0', debug_hssd},
+	{'H', '\0', debug_hssd},
 	{'A', '\0', debug_analog},
 	{'P', '\0', reverse_phase},
 	{'S', '\0', reverse_syncword},
 	{'E', '\0', preamble_size_down},
+	{'D', '\0', dac_src_up},
 	{'\0', '\0', NULL},
 };
 

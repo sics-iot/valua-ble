@@ -353,14 +353,14 @@ drizzle_mode(int new_mode)
 	// TEST: send Drizzle with wrong synch header, in order to create attack solely by including sending Droplet headers in the payload
 	setreg(CC2420_SYNCWORD, 0xCD0F);
 	printf("SYNCWORD=%0x02x\n", getreg(CC2420_SYNCWORD));
-
+	
 	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
 	/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
 	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
 	send_carrier(mode);
- }
+}
 
 /* Reactive jamming */
 static void
@@ -569,10 +569,6 @@ cc2420_set_receiver(void (*f)(const struct radio_driver *));
 PROCESS_THREAD(test_process, ev, data)
 {
 	int i;
-	/* int errno; */
-	/* const struct radio_driver *d; */
-	/* static uint16_t buf[127/2+1]; */
-	/* static uint8_t *buf_ptr = (uint8_t *)buf; */
 
   PROCESS_BEGIN();
 
@@ -593,8 +589,6 @@ PROCESS_THREAD(test_process, ev, data)
 	/* node_id_burn(101); */
 
 	commands_set_callback(start_mode);
-
-	/* d = &cc2420_driver; */
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
