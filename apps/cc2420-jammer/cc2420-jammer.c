@@ -107,7 +107,28 @@ static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
 static struct etimer et;
 static struct rtimer rt;
 static uint16_t seqno;
-static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
+
+/* A byte sequence of certain length */
+struct hex_seq
+{
+	uint8_t *data;
+	const size_t size;
+};
+
+static uint8_t hex_seq_1[] = {127, 1, 0x00, 0xA7};
+static uint8_t hex_seq_2[] = {127, 1, 0x00, 0x00, 0xA7};
+static uint8_t hex_seq_3[] = {127, 1, 0x06, 0xA7};
+
+const static struct hex_seq droplets[] =	{
+	{hex_seq_1, sizeof(hex_seq_1)},
+	{hex_seq_2, sizeof(hex_seq_2)},
+	{hex_seq_3, sizeof(hex_seq_3)}
+};
+
+/* static struct hex_seq *droplet_ptr = &droplets[0]; */
+static int droplet_index;
+/* static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; */
+// No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
 /* uint8_t hex_seq[] = {7, 1, 0x00, 0xA7}; // short length  */
 // TODO: command to alternate preamble len in hex_seq: 0x0, 0x00, 0x000
 static uint8_t txfifo_data[128];
@@ -119,7 +140,8 @@ struct variable const user_variable_list[] = {
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
-	{'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127},
+	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
+	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)},
 	{'0', NULL, 1, NULL, -1, -1},
 };
 
@@ -128,7 +150,7 @@ AUTOSTART_PROCESSES(&test_process);
 
 /*---------------------------------------------------------------------------*/
 static void
-pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_src)(uint8_t *src))
+pad(uint8_t* dst, size_t dst_len, uint8_t* src, const size_t src_len, void (*update_src)(uint8_t *src))
 {
 	int i;
 	for(i = 0;i < dst_len - dst_len % src_len;i+=src_len) {
@@ -138,6 +160,19 @@ pad(uint8_t* dst, size_t dst_len, uint8_t* src, size_t src_len, void (*update_sr
 		}
 	}
 	memcpy(dst+i, src, dst_len % src_len);
+}
+
+/*---------------------------------------------------------------------------*/
+static void
+print_hex_seq(const char *prefix, uint8_t *data, size_t size)
+{
+	int i;
+	char dbuf[size*2+1];
+	char *dbuf_ptr = dbuf;
+	for(i = 0;i < size;++i){
+		dbuf_ptr += snprintf(dbuf_ptr, sizeof(dbuf), "%02x", data[i]);
+	}
+	printf("%s%s\n", prefix, dbuf);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -352,8 +387,13 @@ drizzle_mode(int new_mode)
 	setreg(CC2420_SYNCWORD, 0xCD0F);
 	printf("SYNCWORD=%0x02x\n", getreg(CC2420_SYNCWORD));
 	
-	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
+	/* pad(txfifo_data, sizeof(txfifo_data), droplet_ptr->data, droplet_ptr->size, inc_first_byte); */
+	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
 	/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
+
+	// Debug print
+	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
 	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
@@ -566,8 +606,6 @@ cc2420_set_receiver(void (*f)(const struct radio_driver *));
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(test_process, ev, data)
 {
-	int i;
-
   PROCESS_BEGIN();
 
 	PROCESS_PAUSE();
@@ -576,13 +614,9 @@ PROCESS_THREAD(test_process, ev, data)
 	printf("F_CPU %lu CLOCK_CONF_SECOND %lu RTIMER_CONF_SECOND %u\n", F_CPU, CLOCK_CONF_SECOND, RTIMER_SECOND);
 
 	/* pre-fill pseudo random data for TXFIFO */
-	pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), inc_first_byte);
-	char dbuf[300];
-	char *dbuf_ptr = dbuf;
-	for(i = 0;i < 128;++i){
-		dbuf_ptr += sprintf(dbuf_ptr, "%02x", txfifo_data[i]);
-	}
-	printf("txfifo: %s\n", dbuf);
+	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
+	/* pad(txfifo_data, sizeof(txfifo_data), droplet_ptr->data, droplet_ptr->size, inc_first_byte); */
+	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	/* node_id_burn(101); */
 

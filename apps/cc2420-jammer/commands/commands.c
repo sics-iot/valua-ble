@@ -422,6 +422,7 @@ var_update(char op, char var)
 	uint8_t *u8;
 	uint16_t *u16;
 	uint32_t *u32;
+
 	while(vp->ch != '\0') {
 		if(vp->ch == var) {
 			switch(vp->width) {
