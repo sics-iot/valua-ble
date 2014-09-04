@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008, Swedish Institute of Computer Science.
+ * Copyright (c) 2014, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * This file is part of the Contiki operating system.
+ * This file is NOT part of the Contiki operating system.
  *
  */
 
@@ -111,26 +111,21 @@ static uint16_t seqno;
 /* A byte sequence of certain length */
 struct hex_seq
 {
-	uint8_t *data;
+	const uint8_t *data;
 	const size_t size;
 };
 
-static uint8_t hex_seq_1[] = {127, 1, 0x00, 0xA7};
-static uint8_t hex_seq_2[] = {127, 1, 0x00, 0x00, 0xA7};
-static uint8_t hex_seq_3[] = {127, 1, 0x06, 0xA7};
+// No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
+const static uint8_t hex_seq_1[] = {127, 1, 0x00, 0xA7};
+const static uint8_t hex_seq_2[] = {127, 1, 0x00, 0x00, 0xA7};
+const static uint8_t hex_seq_3[] = {127, 1, 0x06, 0xA7};
 
 const static struct hex_seq droplets[] =	{
 	{hex_seq_1, sizeof(hex_seq_1)},
 	{hex_seq_2, sizeof(hex_seq_2)},
 	{hex_seq_3, sizeof(hex_seq_3)}
 };
-
-/* static struct hex_seq *droplet_ptr = &droplets[0]; */
 static int droplet_index;
-/* static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; */
-// No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
-/* uint8_t hex_seq[] = {7, 1, 0x00, 0xA7}; // short length  */
-// TODO: command to alternate preamble len in hex_seq: 0x0, 0x00, 0x000
 static uint8_t txfifo_data[128];
 
 const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
@@ -142,7 +137,7 @@ struct variable const user_variable_list[] = {
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
 	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)},
-	{'0', NULL, 1, NULL, -1, -1},
+	{'0', NULL, 0, NULL, -1, -1},
 };
 
 PROCESS(test_process, "CC2420 jammer");
@@ -150,13 +145,16 @@ AUTOSTART_PROCESSES(&test_process);
 
 /*---------------------------------------------------------------------------*/
 static void
-pad(uint8_t* dst, size_t dst_len, uint8_t* src, const size_t src_len, void (*update_src)(uint8_t *src))
+pad(uint8_t* dst, size_t dst_len, const uint8_t* src, const size_t src_len, void (*update_src)(uint8_t *src))
 {
 	int i;
+	uint8_t tmp[src_len];
+
+	memcpy(tmp, src, src_len);
 	for(i = 0;i < dst_len - dst_len % src_len;i+=src_len) {
-		memcpy(dst+i, src, src_len);
+		memcpy(dst+i, tmp, src_len);
 		if(update_src) {
-			update_src(src);
+			update_src(tmp);
 		}
 	}
 	memcpy(dst+i, src, dst_len % src_len);
@@ -164,7 +162,7 @@ pad(uint8_t* dst, size_t dst_len, uint8_t* src, const size_t src_len, void (*upd
 
 /*---------------------------------------------------------------------------*/
 static void
-print_hex_seq(const char *prefix, uint8_t *data, size_t size)
+print_hex_seq(const char *prefix, const uint8_t *data, size_t size)
 {
 	int i;
 	char dbuf[size*2+1];
@@ -387,9 +385,7 @@ drizzle_mode(int new_mode)
 	setreg(CC2420_SYNCWORD, 0xCD0F);
 	printf("SYNCWORD=%0x02x\n", getreg(CC2420_SYNCWORD));
 	
-	/* pad(txfifo_data, sizeof(txfifo_data), droplet_ptr->data, droplet_ptr->size, inc_first_byte); */
 	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
-	/* pad(txfifo_data, sizeof(txfifo_data), hex_seq, sizeof(hex_seq), NULL); */
 
 	// Debug print
 	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
@@ -615,10 +611,14 @@ PROCESS_THREAD(test_process, ev, data)
 
 	/* pre-fill pseudo random data for TXFIFO */
 	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
-	/* pad(txfifo_data, sizeof(txfifo_data), droplet_ptr->data, droplet_ptr->size, inc_first_byte); */
 	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
+	// change MAC address
 	/* node_id_burn(101); */
+	unsigned shortaddr = 1;
+	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	printf("shortaddr: %u\n", shortaddr);
 
 	commands_set_callback(start_mode);
 
