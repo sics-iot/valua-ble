@@ -29,6 +29,7 @@ int cc2420_set_frequency(uint16_t f);
 
 static void (*callback)(int v);
 
+// TODO : command to read and display all CC2420 registers
 // Individual command handlers
 /*---------------------------------------------------------------------------*/
 static void
@@ -234,7 +235,6 @@ debug_hssd(void)
 	if(hssd_src == 0) CC2420_ENABLE_FIFOP_INT();
 	else	CC2420_DISABLE_FIFOP_INT();
 
-	// TODO: set FIFO pin as output for modes: 6: adc input 7: dac input; else set as output
 	CC2420_FIFO_PORT(DIR) &= ~BV(CC2420_FIFO_PIN);
 	
 	reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), FDS(hssd_src, HSSD_SRC_LSB));
@@ -346,6 +346,18 @@ dac_src_up(void)
 	printf("DAC_SRC: %u\n", dac_src);
 
 }
+
+/*---------------------------------------------------------------------------*/
+static void
+mac_update(void)
+{
+	unsigned shortaddr;
+	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	shortaddr = (shortaddr+1) & 0x000F;
+	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	printf("shortaddr: %u\n", shortaddr);
+}
+
 /*---------------------------------------------------------------------------*/
 const struct command command_table[] =	{
 	{'n', '\0', next_mode},
@@ -372,6 +384,7 @@ const struct command command_table[] =	{
 	{'S', '\0', reverse_syncword},
 	{'E', '\0', preamble_size_down},
 	{'D', '\0', dac_src_up},
+	{'M', '\0', mac_update},
 	{'\0', '\0', NULL},
 };
 
