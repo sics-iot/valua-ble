@@ -15,6 +15,8 @@
 #define NUM_MODES (LAST_MODE+1)
 
 extern int mode;
+extern volatile int jam_ena;
+extern const uint8_t jam_data[6];
 
 int cc2420_set_frequency(uint16_t f);
 uint16_t cc2420_get_frequency(void);

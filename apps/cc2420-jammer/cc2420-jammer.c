@@ -97,18 +97,16 @@
 #define TX_MODE_2 (2<<2)
 #define TX_MODE_3 (3<<2)
 
-extern int jam_ena;
-extern const uint8_t jam_data[6];
-
 int mode;
-clock_time_t tx_interval = TX_INTERVAL;
-unsigned max_tx_packets = MAX_TX_PACKETS;
-int payload_len = PAYLOAD_LEN;
-rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
 
-struct etimer et;
-struct rtimer rt;
-uint16_t seqno;
+static clock_time_t tx_interval = TX_INTERVAL;
+static unsigned max_tx_packets = MAX_TX_PACKETS;
+static int payload_len = PAYLOAD_LEN;
+static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
+
+static struct etimer et;
+static struct rtimer rt;
+static uint16_t seqno;
 static uint8_t hex_seq[] = {127, 1, 0x00, 0xA7}; // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
 /* uint8_t hex_seq[] = {7, 1, 0x00, 0xA7}; // short length  */
 // TODO: command to alternate preamble len in hex_seq: 0x0, 0x00, 0x000
