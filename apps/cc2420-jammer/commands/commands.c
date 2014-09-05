@@ -359,6 +359,33 @@ mac_update(void)
 }
 
 /*---------------------------------------------------------------------------*/
+static void
+print_u16_as_bits(uint16_t n)
+{
+	int i;
+	char bits[17]; //16 bits + '\0'
+
+	for(i=0;i<16;i++) {
+		bits[i] = (char)((n>>(15-i) & 1) + '0');
+	}
+
+	bits[i] = '\0';
+	printf("%s\n", bits);
+}
+
+static void
+show_all_registers(void)
+{
+	uint16_t reg;
+	enum cc2420_register addr;
+	for (addr = CC2420_MAIN;addr <= CC2420_RESERVED;addr++) {
+		reg = getreg(addr);
+		printf("0x%02X: 0x%04X ", addr, reg);
+		print_u16_as_bits(reg);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 const struct command command_table[] =	{
 	{'n', '\0', next_mode},
 	{'p', '\0', previous_mode},
@@ -385,6 +412,7 @@ const struct command command_table[] =	{
 	{'E', '\0', preamble_size_down},
 	{'D', '\0', dac_src_up},
 	{'M', '\0', mac_update},
+	{'L', '\0', show_all_registers},
 	{'\0', '\0', NULL},
 };
 
