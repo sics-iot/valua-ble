@@ -136,7 +136,7 @@ struct variable const user_variable_list[] = {
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
 	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
-	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)},
+	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
 	{'0', NULL, 0, NULL, -1, -1},
 };
 
