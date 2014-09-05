@@ -491,11 +491,11 @@ tx2_eth(void)
 #define MHR_LEN 7 // 16-bit FCF + 8-bit SEQ + 16-bit PAN + 16-bit DST
 		// FCF: frame type Data, ack req = 1, dst add mode = 2, frame ver = 1 src add mode = 0
 		buf[0] = 0x01<<0 | 0<<3 | 0<<4 | 1<<5 | 0<<6 | 0x0<<7 | 2<<10 | 1<<12 | 0<<14;
-		buf_ptr[2] = (uint8_t)seqno % 0xFF;
+		buf_ptr[2] = (uint8_t)(seqno & 0x00FF);
 		buf_ptr[3] = 0xFF;
 		buf_ptr[4] = 0xFF;
-		buf_ptr[5] = 0x12; // dest. rimeaddr lower byte
-		buf_ptr[6] = 0x02; // dest. rimeaddr higher byte
+		buf_ptr[5] = 0x02; // dest. rimeaddr lower byte
+		buf_ptr[6] = 0x00; // dest. rimeaddr higher byte
 		for(i = MHR_LEN;i < payload_len;++i) {
 			buf_ptr[i] = (uint8_t)random_rand();
 		}
@@ -510,6 +510,7 @@ tx2_eth(void)
 		printf("Finished sending %u packets\n", seqno);
 	}
 }
+
 static void
 cs_eth(void)
 {
@@ -614,7 +615,7 @@ PROCESS_THREAD(test_process, ev, data)
 	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	// change MAC address
-	/* node_id_burn(101); */
+	/* node_id_burn(100); */
 	unsigned shortaddr = 1;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
