@@ -212,17 +212,16 @@ debug_hssd(void)
 #define HSSD_SRC_MSB 12
 #define HSSD_SRC_LSB 10
 	uint16_t reg = getreg(CC2420_IOCFG1);
-	uint16_t hssd_src = FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB);
+	uint16_t hssd_src = FV(reg, HSSD_SRC_MSB, HSSD_SRC_LSB);
 	hssd_src = (hssd_src + 1) % 8;
 	if(hssd_src == 0) CC2420_ENABLE_FIFOP_INT();
 	else	CC2420_DISABLE_FIFOP_INT();
 
 	CC2420_FIFO_PORT(DIR) &= ~BV(CC2420_FIFO_PIN);
-	
-	reg = SETFDS(reg, FV(HSSD_SRC_MSB, HSSD_SRC_LSB), FDS(hssd_src, HSSD_SRC_LSB));
+	reg = SETFV(reg, hssd_src, HSSD_SRC_MSB, HSSD_SRC_LSB);
 	setreg(CC2420_IOCFG1, reg);
 	reg = getreg(CC2420_IOCFG1);
-	printf("HSSD_SRC: %u \n", FVAL(reg, HSSD_SRC_MSB, HSSD_SRC_LSB));
+	printf("HSSD_SRC: %u \n", FV(reg, HSSD_SRC_MSB, HSSD_SRC_LSB));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -236,7 +235,7 @@ debug_analog(void)
 
 	uint16_t reg = getreg(CC2420_TOPTST);
 	uint16_t atestmod_pd = (reg & ATESTMOD_PD_BV) >> 4;
-	uint16_t atestmod_mode = FVAL(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
+	uint16_t atestmod_mode = FV(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
 
 	if (atestmod_pd) {
 		// Power is down: start Atest and start from mode 0
@@ -251,12 +250,12 @@ debug_analog(void)
 	}
 
 	reg = (reg & ~0x0001F) | (atestmod_pd << 4);
-	reg = SETFD(reg, atestmod_mode, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
+	reg = SETFV(reg, atestmod_mode, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
 	setreg(CC2420_TOPTST, reg);
 	reg = getreg(CC2420_TOPTST);
 	printf("ATESTMOD_PD: %u ATESTMOD_MODE: %u\n",
 				 (reg & (0x0001 << 4)) >> 4,
-				 FVAL(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB));
+				 FV(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB));
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -300,9 +299,9 @@ preamble_size_down(void)
 #define PREAMBLE_LENGTH_MSB 3
 #define PREAMBLE_LENGTH_LSB 0
 	uint16_t reg = getreg(CC2420_MDMCTRL0);
-	uint16_t preamble_len = FVAL(reg, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB);
+	uint16_t preamble_len = FV(reg, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB);
 	preamble_len = (preamble_len - 1) % 16;
-	setreg(CC2420_MDMCTRL0, SETFD(reg, preamble_len, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB));
+	setreg(CC2420_MDMCTRL0, SETFV(reg, preamble_len, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB));
 	printf("Preamble length: %u bytes\n", preamble_len+1);
 }
 /*---------------------------------------------------------------------------*/
@@ -321,10 +320,10 @@ dac_src_up(void)
 #define DAC_SRC_MSB 14
 #define DAC_SRC_LSB 12
 	uint16_t reg = getreg(CC2420_DACTST);
-	uint16_t dac_src = FVAL(reg, DAC_SRC_MSB, DAC_SRC_LSB);
+	uint16_t dac_src = FV(reg, DAC_SRC_MSB, DAC_SRC_LSB);
 	dac_src = (dac_src + 1) % 8;
 
-	setreg(CC2420_DACTST, SETFD(reg, dac_src, DAC_SRC_MSB, DAC_SRC_LSB));
+	setreg(CC2420_DACTST, SETFV(reg, dac_src, DAC_SRC_MSB, DAC_SRC_LSB));
 	printf("DAC_SRC: %u\n", dac_src);
 
 }

@@ -246,7 +246,7 @@ reset_transmitter(void)
 
 	/* reset FIFOP threshold to maximum */
 		reg = getreg(CC2420_IOCFG0);
-		setreg(CC2420_IOCFG0, SETFD(reg, 127, FIFOP_THR_MSB, FIFOP_THR_LSB));
+		setreg(CC2420_IOCFG0, SETFV(reg, 127, FIFOP_THR_MSB, FIFOP_THR_LSB));
 
 		/* Turn off autoack */
 		reg = getreg(CC2420_MDMCTRL0);
@@ -425,7 +425,7 @@ jam_mode(int new_mode)
 
 	/* Raise FIFOP interrupt immediately after the length byte, i.e. the 1st byte into RXFIFO, is received */
 	reg = getreg(CC2420_IOCFG0);
-	setreg(CC2420_IOCFG0, SETFD(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB));
+	setreg(CC2420_IOCFG0, SETFV(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB));
 
 	/* Pre-fill TX FIFO for next jam */
 	CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data));

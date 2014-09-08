@@ -1,24 +1,17 @@
 #ifndef COMMANDS
 #define COMMANDS
 
-// Field Vector (FV) generator macro based on user defined MSB and LSB
-#define FV(MSB, LSB) \
+// Field mask, generated from MSB and LSB. E.g. FM(4,0)=0x000F, FM(5,1)=0x001E
+#define FM(MSB, LSB) \
 	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
 
-// Field value (FVAL) generator macro
-#define FVAL(REGVAL, MSB, LSB) \
-	((REGVAL & FV(MSB, LSB)) >> LSB)
+// Field value, extracted from register value, MSB and LSB
+#define FV(REGVAL, MSB, LSB) \
+	((REGVAL & FM(MSB, LSB)) >> LSB)
 
-// Set Field macro
-#define SETFD(REGVAL, FVAL, MSB, LSB) \
-	((REGVAL & ~FV(MSB, LSB)) | (FVAL << LSB))
-
-#define FDS(FVAL, LSB) \
-	((FVAL) << (LSB))
-
-// Set Fields
-#define SETFDS(REGVAL, FV, FDS)	\
-	((REGVAL & ~FV) | (FDS))
+// Register value, with updated field
+#define SETFV(REGVAL, FV, MSB, LSB) \
+	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
 
 extern long int sum_rssi;
 extern long unsigned sum_lqi;
