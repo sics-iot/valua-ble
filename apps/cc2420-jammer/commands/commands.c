@@ -161,12 +161,6 @@ view_tx_power_level(void){
 }
 /*---------------------------------------------------------------------------*/
 static void
-this_mode_again(void)
-{
-	/* start_mode(mode); */
-}
-/*---------------------------------------------------------------------------*/
-static void
 agc_lnamix_gainmode_up(void)
 {
 	uint16_t reg = getreg(CC2420_AGCCTRL);
@@ -382,7 +376,6 @@ const struct command command_table[] =	{
 	{'v', '\0', view_rx_statistics},
 	{'V', '\0', view_failed_rx_statistics},
 	{'w', '\0', view_tx_power_level},
-	{'a', '\0', this_mode_again},
 	{'g', '\0', agc_lnamix_gainmode_up},
 	{'G', '\0', agc_vga_gain_up},
 	{'H', '\0', debug_hssd},
