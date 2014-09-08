@@ -97,7 +97,7 @@
 #define TX_MODE_2 (2<<2)
 #define TX_MODE_3 (3<<2)
 
-int mode;
+static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
 static unsigned max_tx_packets = MAX_TX_PACKETS;
@@ -137,6 +137,7 @@ struct variable const user_variable_list[] = {
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
 	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
+	/* {'m', (union number*)&mode, sizeof(mode), "mode", 0, LAST_MODE}, */
 	{'0', NULL, 0, NULL, -1, -1},
 };
 
@@ -175,7 +176,7 @@ print_hex_seq(const char *prefix, const uint8_t *data, size_t size)
 
 /*---------------------------------------------------------------------------*/
 /* CC2420 Serial TX mode */
-void
+static void
 send_len(struct rtimer *t, void *ptr)
 {
 		if (ptr) {
@@ -192,7 +193,7 @@ send_len(struct rtimer *t, void *ptr)
 }
 /*---------------------------------------------------------------------------*/
 /* Periodic Droplet transmission */
-void
+static void
 send_len_buf(struct rtimer *t, void *ptr)
 {
 	if (ptr) {
@@ -223,7 +224,7 @@ send_len_buf(struct rtimer *t, void *ptr)
 }
 /*---------------------------------------------------------------------------*/
 /* Reset transmitter to normal packet mode */
-void
+static void
 reset_transmitter(void)
 {
   unsigned reg;
@@ -383,7 +384,7 @@ drizzle_mode(int new_mode)
 {
 	// TEST: send Drizzle with wrong synch header, in order to create attack solely by including sending Droplet headers in the payload
 	setreg(CC2420_SYNCWORD, 0xCD0F);
-	printf("SYNCWORD=%0x02x\n", getreg(CC2420_SYNCWORD));
+	printf("SYNCWORD=0x%02x\n", getreg(CC2420_SYNCWORD));
 	
 	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
 
@@ -529,6 +530,7 @@ attack_eth(void)
 {
 	etimer_stop(&et);
 	rt.ptr = NULL; 		// stop rtimer
+	setreg(CC2420_SYNCWORD, 0xA70F);
 	reset_transmitter();
 	printf("Finished transmission after %lu seconds\n",
 				 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
