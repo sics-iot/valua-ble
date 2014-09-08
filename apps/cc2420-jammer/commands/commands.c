@@ -24,7 +24,6 @@ extern int cc2420_packets_seen, cc2420_packets_read;
 
 static void (*callback)(int v);
 
-// TODO : command to read and display all CC2420 registers
 // Individual command handlers
 static void
 reboot(void)
@@ -163,39 +162,50 @@ view_tx_power_level(void){
 static void
 agc_lnamix_gainmode_up(void)
 {
+#define LNAMIX_GAINMODE_O_MSB 3
+#define LNAMIX_GAINMODE_O_LSB 2
+#define LNAMIX_GAINMODE_MSB 1
+#define LNAMIX_GAINMODE_LSB 0
+
 	uint16_t reg = getreg(CC2420_AGCCTRL);
-	unsigned lna_o = (reg &  (3<<2)) >> 2;
+	unsigned lna_o = FV(reg, LNAMIX_GAINMODE_O_MSB, LNAMIX_GAINMODE_O_LSB);
 	lna_o = (lna_o + 1) % 4;
-	reg = (reg & ~(0x0FFF)) | (reg & ~(3<<2)) | (lna_o << 2);
+	reg = SETFV(reg, lna_o, LNAMIX_GAINMODE_O_MSB, LNAMIX_GAINMODE_O_LSB);
 	setreg(CC2420_AGCCTRL, reg);
-	printf("LNAMIX_GAINMODE = %u\n", getreg(CC2420_AGCCTRL) & 0x03);
+	printf("LNAMIX_GAINMODE = %u\n", FV(getreg(CC2420_AGCCTRL), LNAMIX_GAINMODE_MSB, LNAMIX_GAINMODE_LSB));
 }
 /*---------------------------------------------------------------------------*/
 static void
 agc_vga_gain_up(void)
 {
+#define VGA_GAIN_OE_MSB 11 
+#define VGA_GAIN_OE_LSB 11
+#define VGA_GAIN_MSB 10
+#define VGA_GAIN_LSB 4
+
 	uint16_t reg = getreg(CC2420_AGCCTRL);
-	unsigned vga_gain = (reg &  (0x7F<<4)) >> 4;
-	unsigned vga_gain_oe = (reg & (1<<11)) >>11;
+	/* unsigned vga_gain = (reg &  (0x7F<<4)) >> 4; */
+	/* unsigned vga_gain_oe = (reg & (1<<11)) >>11; */
+	unsigned vga_gain_oe = FV(reg, VGA_GAIN_OE_MSB, VGA_GAIN_OE_LSB);
+	unsigned vga_gain = FV(reg, VGA_GAIN_MSB, VGA_GAIN_LSB);
 	if(!vga_gain_oe) {
 		vga_gain_oe = 1;
 		vga_gain = 1;
-		/* vga_gain = 0x40; // switches on first gain stage */
 	} else if (vga_gain < 0x7F) {
 		vga_gain = vga_gain + 1;
-		/* vga_gain = 0x40 | (vga_gain>>1); // switches on successive gain stages */
 	} else {
 		vga_gain_oe = 0;
 	}
-	reg = (reg & ~(0x0FFF)) | (reg & ~(0xFF<<4)) | (vga_gain_oe<<11) | (vga_gain<<4);
+	reg = SETFV(reg, vga_gain_oe, VGA_GAIN_OE_MSB, VGA_GAIN_OE_LSB);
+	reg = SETFV(reg, vga_gain, VGA_GAIN_MSB, VGA_GAIN_LSB);
 	setreg(CC2420_AGCCTRL, reg);
 	reg = getreg(CC2420_AGCCTRL);
-	vga_gain = (reg &  (0x7F<<4)) >> 4;
-	vga_gain_oe = (reg & (1<<11)) >>11;
+	vga_gain_oe = FV(reg, VGA_GAIN_OE_MSB, VGA_GAIN_OE_LSB);
+	vga_gain = FV(reg, VGA_GAIN_MSB, VGA_GAIN_LSB);
 	printf("LNAMIX_GAINMODE = %u, VGA_GAIN_OE = %u, VGA_GAIN = %u\n",
-				 reg & 0x03,
-				 vga_gain_oe,
-				 vga_gain);
+		FV(reg, LNAMIX_GAINMODE_MSB, LNAMIX_GAINMODE_LSB),
+		vga_gain_oe,
+		vga_gain);
 }
 /*---------------------------------------------------------------------------*/
 /* High speed serial debug mode */
@@ -224,11 +234,12 @@ debug_analog(void)
 {
 #define ATESTMOD_MODE_MSB 3
 #define ATESTMOD_MODE_LSB 0
-#define ATESTMOD_PD_BV (0x0001 <<4)
+#define ATESTMOD_PD_MSB 4
+#define ATESTMOD_PD_LSB 4
 #define ATESTMOD_START 4 // first invocation jumpstarts to mode [0,8]
 
 	uint16_t reg = getreg(CC2420_TOPTST);
-	uint16_t atestmod_pd = (reg & ATESTMOD_PD_BV) >> 4;
+	uint16_t atestmod_pd = FV(reg, ATESTMOD_PD_MSB, ATESTMOD_PD_LSB);
 	uint16_t atestmod_mode = FV(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
 
 	if (atestmod_pd) {
@@ -243,12 +254,12 @@ debug_analog(void)
 			atestmod_pd++;
 	}
 
-	reg = (reg & ~0x0001F) | (atestmod_pd << 4);
+	reg = SETFV(reg, atestmod_pd, ATESTMOD_PD_MSB, ATESTMOD_PD_LSB);
 	reg = SETFV(reg, atestmod_mode, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB);
 	setreg(CC2420_TOPTST, reg);
 	reg = getreg(CC2420_TOPTST);
 	printf("ATESTMOD_PD: %u ATESTMOD_MODE: %u\n",
-				 (reg & (0x0001 << 4)) >> 4,
+				 FV(reg, ATESTMOD_PD_MSB, ATESTMOD_PD_LSB),
 				 FV(reg, ATESTMOD_MODE_MSB, ATESTMOD_MODE_LSB));
 }
 /*---------------------------------------------------------------------------*/
