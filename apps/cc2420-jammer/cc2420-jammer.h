@@ -14,7 +14,6 @@
 #define LAST_MODE JAM
 #define NUM_MODES (LAST_MODE+1)
 
-extern int mode;
 extern volatile int jam_ena;
 extern const uint8_t jam_data[6];
 
