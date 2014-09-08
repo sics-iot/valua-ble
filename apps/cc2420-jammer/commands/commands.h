@@ -25,6 +25,7 @@ int cc2420_set_frequency(uint16_t f);
 void do_command(char *cmd);
 void commands_set_callback(void (*f)(int));
 void var_update(char op, char var);
+void field_update(char c, char op);
 
 struct command
 {
@@ -58,8 +59,8 @@ extern const struct variable user_variable_list[];
 				case '-': n -= 1;	break;\
  				case '*': n *= 10;	break;\
  				case '/': n /= 10;	break;\
- 				case '<': n <<= 1;	break;\
- 				case '>': n >>= 1;	break;\
+ 				case '>': n <<= 1;	break;\
+ 				case '<': n >>= 1;	break;\
  				case '^': n += 10;	break;\
  				case '\'': n -= 10;	break;\
 				default:;\

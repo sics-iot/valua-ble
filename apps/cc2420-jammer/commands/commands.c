@@ -9,9 +9,6 @@
 
 #include "commands.h"
 
-#define CCAMUX_BV (31<<0)
-#define SFDMUX_BV (31<<5)
-
 long int sum_rssi;
 long unsigned sum_lqi;
 int min_rssi = 15, max_rssi = -55;
@@ -92,30 +89,6 @@ frequency_down(void)
 	/* uint16_t f = cc2420_get_frequency(); */
 	/* cc2420_set_frequency(f - 1); */
 	/* printf("cc2420 frequency = %u\n", cc2420_get_frequency()); */
-}
-/*---------------------------------------------------------------------------*/
-static void
-cca_mux_up(void)
-{
-	uint16_t reg;
-	reg = getreg(CC2420_IOCFG1);
-	unsigned ccamux = (reg & CCAMUX_BV) >> 0;
-	ccamux = (ccamux + 1) % 32;
-	reg = (reg & (~CCAMUX_BV)) | (ccamux<<0);
-	setreg(CC2420_IOCFG1, reg);
-	printf("CCAMUX = %02u\n", ccamux);
-}
-/*---------------------------------------------------------------------------*/
-static void
-sfd_mux_up(void)
-{
-	uint16_t reg;
-	reg = getreg(CC2420_IOCFG1);
-	unsigned sfdmux = (reg & SFDMUX_BV) >> 5;
-	sfdmux = (sfdmux + 1) % 32;
-	reg = (reg & (~SFDMUX_BV)) | (sfdmux<<5);
-	setreg(CC2420_IOCFG1, reg);
-	printf("SFDMUX = %02u\n", sfdmux);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -381,8 +354,6 @@ const struct command command_table[] =	{
 	{'-', '\0', channel_down},
 	{'>', '\0', frequency_up},
 	{'<', '\0', frequency_down},
-	{'c', '\0', cca_mux_up},
-	{'s', '\0', sfd_mux_up},
 	{'v', '\0', view_rx_statistics},
 	{'V', '\0', view_failed_rx_statistics},
 	{'w', '\0', view_tx_power_level},
@@ -393,7 +364,6 @@ const struct command command_table[] =	{
 	{'P', '\0', reverse_phase},
 	{'S', '\0', reverse_syncword},
 	{'E', '\0', preamble_size_down},
-	{'D', '\0', dac_src_up},
 	{'M', '\0', mac_update},
 	{'L', '\0', show_all_registers},
 	{'\0', '\0', NULL},
@@ -418,8 +388,10 @@ do_command(char *s)
 		callback(s[0] - '0');
 		return;
 	}
-	else if(s[1] != '\0' && (s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\''))
+	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'') && s[1] != '\0')
 		var_update(s[0], s[1]);
+	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>')
+		field_update(s[0], s[1]);
 	else {
 		const struct command *ptr = &command_table[0];
 		while(ptr->f != NULL) {
@@ -472,5 +444,43 @@ var_update(char op, char var)
 			}
 		}
 		vp++;
+	}
+}
+
+/*-----------------------------------------------------------------------------*/ 
+// Generic CC2420 field update operations
+struct field
+{
+	char cmd;
+	const char *name;
+	enum cc2420_register addr;
+	unsigned msb;
+	unsigned lsb;
+};
+ 
+const static struct field field_list[] = {
+	{'c', "CCAMUX", CC2420_IOCFG1, 4, 0},
+	{'s', "SFDMUX", CC2420_IOCFG1, 9, 5},
+	{'d', "DAC_SRC", CC2420_DACTST, 14, 12},
+	{'g', "LNAMIX_GAINMODE_O", CC2420_AGCCTRL, 3, 2},
+	{'G', "VGA_GAIN", CC2420_AGCCTRL, 10, 4},
+};
+
+void
+	field_update(char c, char op)
+{
+	const struct field *fp;
+	unsigned reg, fv;
+	
+	for(fp=&field_list[0]; fp < &field_list[0] + sizeof(field_list)/sizeof(struct field); fp++) {
+		if(fp->cmd == c) {
+			reg = getreg(fp->addr);
+			fv = FV(reg, fp->msb, fp->lsb);
+			OP(fv, op);
+			fv = fv % (0x1<<(fp->msb - fp->lsb +1));
+			reg = SETFV(reg, fv, fp->msb, fp->lsb);
+			setreg(fp->addr, reg);
+			printf("%s=%u\n", fp->name, fv);
+		}
 	}
 }
