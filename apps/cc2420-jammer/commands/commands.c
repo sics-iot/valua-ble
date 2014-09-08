@@ -22,11 +22,6 @@ extern int jam_ena;
 extern const unsigned char tx_power_level[10];
 extern int cc2420_packets_seen, cc2420_packets_read;
 
-unsigned getreg(enum cc2420_register regname);
-void setreg(enum cc2420_register regname, unsigned value);
-uint16_t cc2420_get_frequency(void);
-int cc2420_set_frequency(uint16_t f);
-
 static void (*callback)(int v);
 
 // TODO : command to read and display all CC2420 registers

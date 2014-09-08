@@ -25,8 +25,14 @@ extern long unsigned sum_lqi;
 extern uint8_t len_hdr;
 /* extern uint8_t hex_seq[]; */
 
-void
-do_command(char *cmd);
+unsigned getreg(enum cc2420_register regname);
+void setreg(enum cc2420_register regname, unsigned value);
+uint16_t cc2420_get_frequency(void);
+int cc2420_set_frequency(uint16_t f);
+
+void do_command(char *cmd);
+void commands_set_callback(void (*f)(int));
+void var_update(char op, char var);
 
 struct command
 {
@@ -34,8 +40,6 @@ struct command
 	char ch2;
 	void (*f)(void);
 };
-
-void commands_set_callback(void (*f)(int));
 
 // User-adjustable variable (non-negative integer type)
 union number {
@@ -55,9 +59,6 @@ struct variable
 };
 
 extern const struct variable user_variable_list[];
-
-void
-var_update(char op, char var);
 
 #define OP(n, op)\
 				switch(op) {\
