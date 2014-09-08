@@ -101,8 +101,9 @@ static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
 static unsigned max_tx_packets = MAX_TX_PACKETS;
-static int payload_len = PAYLOAD_LEN;
+static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
+static uint8_t len_hdr = 127;
 
 static struct etimer et;
 static struct rtimer rt;
@@ -199,9 +200,7 @@ send_len_buf(struct rtimer *t, void *ptr)
 	if (ptr) {
 		/* Write empty frame to TX FIFO. */
 		// frame length is appended by a bogus byte that induces a minimal delay to the power-down of the TX circuit, thus avoiding corruption of transmitted frame length.
-		static uint8_t total_len[2] = {127, 0xA5};
-		total_len[0] = len_hdr;
-		CC2420_WRITE_FIFO_BUF(&total_len, 2);
+		CC2420_WRITE_FIFO_BUF(&len_hdr, 2);
 
 		/* Transmit */
 		strobe(CC2420_STXON);
@@ -214,12 +213,7 @@ send_len_buf(struct rtimer *t, void *ptr)
 		strobe(CC2420_SFLUSHTX);
 
 		/* schedule next send */
-		/* rtimer_set(&rt, RTIMER_NOW() + rtimer_interval, 0, send_len_buf, (void *)1); */
-		/* if (rt.clock + rtimer_interval - RTIMER_NOW() > 0) { */
 			rtimer_set(&rt, rt.time + rtimer_interval, 0, send_len_buf, (void *)1);
-		/* } else { */
-		/* 	rtimer_set(&rt, RTIMER_NOW() + rtimer_interval, 0, send_len_buf, (void *)1); */
-		/* } */
 	}
 }
 /*---------------------------------------------------------------------------*/

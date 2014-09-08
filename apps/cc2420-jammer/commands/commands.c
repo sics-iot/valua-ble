@@ -16,7 +16,6 @@ long int sum_rssi;
 long unsigned sum_lqi;
 int min_rssi = 15, max_rssi = -55;
 unsigned min_lqi = 108, max_lqi = 0;
-uint8_t len_hdr = 127;
 
 extern int jam_ena;
 extern const unsigned char tx_power_level[10];
