@@ -31,19 +31,6 @@ static void (*callback)(int v);
 
 // TODO : command to read and display all CC2420 registers
 // Individual command handlers
-/*---------------------------------------------------------------------------*/
-static void
-next_mode(void)
-{
-	/* start_mode((mode + 1) % NUM_MODES); */
-}
-/*---------------------------------------------------------------------------*/
-static void
-previous_mode(void)
-{
-	/* start_mode((mode - 1) % NUM_MODES); */
-}
-/*---------------------------------------------------------------------------*/
 static void
 reboot(void)
 {
@@ -359,18 +346,18 @@ mac_update(void)
 }
 
 /*---------------------------------------------------------------------------*/
-static void
-print_u16_as_bits(uint16_t n)
+static char*
+u16_to_bits(uint16_t n, char bits[])
 {
 	int i;
-	char bits[17]; //16 bits + '\0'
 
 	for(i=0;i<16;i++) {
 		bits[i] = (char)((n>>(15-i) & 1) + '0');
 	}
 
 	bits[i] = '\0';
-	printf("%s\n", bits);
+
+	return bits;
 }
 
 static void
@@ -378,17 +365,16 @@ show_all_registers(void)
 {
 	uint16_t reg;
 	enum cc2420_register addr;
+	char bits[17]; //16 bits + '\0'
+
 	for (addr = CC2420_MAIN;addr <= CC2420_RESERVED;addr++) {
 		reg = getreg(addr);
-		printf("0x%02X: 0x%04X ", addr, reg);
-		print_u16_as_bits(reg);
+		printf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits));
 	}
 }
 
 /*---------------------------------------------------------------------------*/
 const struct command command_table[] =	{
-	{'n', '\0', next_mode},
-	{'p', '\0', previous_mode},
 	{'e', '\0', reboot},
 	{'u', '\0', power_up},
 	{'d', '\0', power_down},
