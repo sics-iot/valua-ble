@@ -30,7 +30,6 @@ void field_update(char c, char op);
 struct command
 {
 	char ch1;
-	char ch2;
 	void (*f)(void);
 };
 
