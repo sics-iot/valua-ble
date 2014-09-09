@@ -76,22 +76,6 @@ channel_down(void)
 }
 /*---------------------------------------------------------------------------*/
 static void
-frequency_up(void)
-{
-	/* uint16_t f = cc2420_get_frequency(); */
-	/* cc2420_set_frequency(f + 1); */
-	/* printf("cc2420 frequency = %u\n", cc2420_get_frequency()); */
-}
-/*---------------------------------------------------------------------------*/
-static void
-frequency_down(void)
-{
-	/* uint16_t f = cc2420_get_frequency(); */
-	/* cc2420_set_frequency(f - 1); */
-	/* printf("cc2420 frequency = %u\n", cc2420_get_frequency()); */
-}
-/*---------------------------------------------------------------------------*/
-static void
 view_rx_statistics(void)
 {
 	printf("rx = %lu llrx = %lu avg_rssi = %ld[%d,%d] avg_lqi = %lu[%u,%u] pkts_seen = %d pkts_read = %d\n",
@@ -129,55 +113,6 @@ view_failed_rx_statistics(void)
 static void
 view_tx_power_level(void){
 	printf("tx power = %u\n", cc2420_get_txpower());
-}
-/*---------------------------------------------------------------------------*/
-static void
-agc_lnamix_gainmode_up(void)
-{
-#define LNAMIX_GAINMODE_O_MSB 3
-#define LNAMIX_GAINMODE_O_LSB 2
-#define LNAMIX_GAINMODE_MSB 1
-#define LNAMIX_GAINMODE_LSB 0
-
-	uint16_t reg = getreg(CC2420_AGCCTRL);
-	unsigned lna_o = FV(reg, LNAMIX_GAINMODE_O_MSB, LNAMIX_GAINMODE_O_LSB);
-	lna_o = (lna_o + 1) % 4;
-	reg = SETFV(reg, lna_o, LNAMIX_GAINMODE_O_MSB, LNAMIX_GAINMODE_O_LSB);
-	setreg(CC2420_AGCCTRL, reg);
-	printf("LNAMIX_GAINMODE = %u\n", FV(getreg(CC2420_AGCCTRL), LNAMIX_GAINMODE_MSB, LNAMIX_GAINMODE_LSB));
-}
-/*---------------------------------------------------------------------------*/
-static void
-agc_vga_gain_up(void)
-{
-#define VGA_GAIN_OE_MSB 11 
-#define VGA_GAIN_OE_LSB 11
-#define VGA_GAIN_MSB 10
-#define VGA_GAIN_LSB 4
-
-	uint16_t reg = getreg(CC2420_AGCCTRL);
-	/* unsigned vga_gain = (reg &  (0x7F<<4)) >> 4; */
-	/* unsigned vga_gain_oe = (reg & (1<<11)) >>11; */
-	unsigned vga_gain_oe = FV(reg, VGA_GAIN_OE_MSB, VGA_GAIN_OE_LSB);
-	unsigned vga_gain = FV(reg, VGA_GAIN_MSB, VGA_GAIN_LSB);
-	if(!vga_gain_oe) {
-		vga_gain_oe = 1;
-		vga_gain = 1;
-	} else if (vga_gain < 0x7F) {
-		vga_gain = vga_gain + 1;
-	} else {
-		vga_gain_oe = 0;
-	}
-	reg = SETFV(reg, vga_gain_oe, VGA_GAIN_OE_MSB, VGA_GAIN_OE_LSB);
-	reg = SETFV(reg, vga_gain, VGA_GAIN_MSB, VGA_GAIN_LSB);
-	setreg(CC2420_AGCCTRL, reg);
-	reg = getreg(CC2420_AGCCTRL);
-	vga_gain_oe = FV(reg, VGA_GAIN_OE_MSB, VGA_GAIN_OE_LSB);
-	vga_gain = FV(reg, VGA_GAIN_MSB, VGA_GAIN_LSB);
-	printf("LNAMIX_GAINMODE = %u, VGA_GAIN_OE = %u, VGA_GAIN = %u\n",
-		FV(reg, LNAMIX_GAINMODE_MSB, LNAMIX_GAINMODE_LSB),
-		vga_gain_oe,
-		vga_gain);
 }
 /*---------------------------------------------------------------------------*/
 /* High speed serial debug mode */
@@ -261,7 +196,7 @@ mac_update(void)
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	shortaddr = (shortaddr+1) & 0x000F;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
-	printf("shortaddr: %u\n", shortaddr);
+	printf("16-bit MAC address: %u\n", shortaddr);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -300,13 +235,9 @@ const struct command command_table[] =	{
 	{'r', rssi},
 	{'+', channel_up},
 	{'-', channel_down},
-	{'>', frequency_up},
-	{'<', frequency_down},
 	{'v', view_rx_statistics},
 	{'V', view_failed_rx_statistics},
 	{'w', view_tx_power_level},
-	{'g', agc_lnamix_gainmode_up},
-	{'G', agc_vga_gain_up},
 	{'H', debug_hssd},
 	{'A', debug_analog},
 	{'S', reverse_syncword},
@@ -405,26 +336,47 @@ struct field
 	unsigned msb;
 	unsigned lsb;
 };
- 
+
 const static struct field field_list[] = {
 	{'c', "CCAMUX", CC2420_IOCFG1, 4, 0},
 	{'s', "SFDMUX", CC2420_IOCFG1, 9, 5},
-/* the TX DACs data source is selected by DAC_SRC according to: */
-/* 0: Normal operation (from modulator). */
-/* 1: The DAC_I_O and DAC_Q_O override values below.- */
-/* 2: From ADC, most significant bits */
-/* 3: I/Q after digital down mixing and channel filtering. */
-/* 4: Full-spectrum White Noise (from CRC) */
-/* 5: From ADC, least significant bits */
-/* 6: RSSI / Cordic Magnitude Output */
-/* 7: HSSD module. */
+	/* the TX DACs data source is selected by DAC_SRC according to: */
+	/* 0: Normal operation (from modulator). */
+	/* 1: The DAC_I_O and DAC_Q_O override values below.- */
+	/* 2: From ADC, most significant bits */
+	/* 3: I/Q after digital down mixing and channel filtering. */
+	/* 4: Full-spectrum White Noise (from CRC) */
+	/* 5: From ADC, least significant bits */
+	/* 6: RSSI / Cordic Magnitude Output */
+	/* 7: HSSD module. */
 	{'d', "DAC_SRC", CC2420_DACTST, 14, 12},
+	/* DAC override values, 5-bit */
+	{'i', "DAC_I_O", CC2420_DACTST, 11, 5},
+	{'q', "DAC_I_Q", CC2420_DACTST, 4, 0},
+	/* LNA and mixer gain: 0=automatic, 1,2,3=low,mid,high */
 	{'g', "LNAMIX_GAINMODE_O", CC2420_AGCCTRL, 3, 2},
-	{'G', "VGA_GAIN", CC2420_AGCCTRL, 10, 4},
-/* Modulation mode: 0=normal, 1=reverse phase */
+	/* VGA gain override: 0=automatic, 1=manual  */
+	{'V', "VGA_GAIN_OE", CC2420_AGCCTRL, 11, 11},
+	/* VGA gain: 0-127, non-linear, non-monotonic relationship btw. value and gain  */
+	/* read <= current gain, write => manual gain */
+	{'v', "VGA_GAIN", CC2420_AGCCTRL, 10, 4},
+	/* Modulation mode: 0=normal, 1=reverse phase */
 	{'P', "MOD_MODE", CC2420_MDMCTRL1, 4, 4},
-/* Preamble length 0-15 => 1-16 bytes */
+	/* Preamble length in bytes: 0-15=1-16 */
 	{'E', "PREAMBLE_LENGTH", CC2420_MDMCTRL0, 3, 0},
+	/* Carrier frequency in 1 MHz steps: 0-1023=2048-3071 MHz, 357=2405 MHz */
+	{'f', "FREQ", CC2420_FSCTRL, 9, 0},
+	/* Output PA level: 3=-25dB, 7=-15dB, 11=-10dB 15=-7dB 19=-5dB 23=-3dB 27=-1dB 31=0dB */
+	{'p', "PA_LEVEL", CC2420_TXCTRL, 4, 0},
+	/* 16-bit Syncword: 0xA70F="00" preamble, 0xA7FF="0" preamble, 0xA700="000" preamble */
+	{'S', "SYNCWORD", CC2420_SYNCWORD, 15, 0},
+	/* The time after the last chip in the packet is sent, and the TXRX switch is disabled. In μs. */
+	{'t', "TC_TXEND2SWITCH[2:0]", CC2420_FSMTC, 5, 3},
+	/* The time after the last chip in the packet is sent, and the PA is set in power-down. Also the time at which the modulator is disabled. In μs. */
+	{'T', "TC_TXEND2PAOFF[2:0]", CC2420_FSMTC, 2, 0},
+	{'A', "ATESTMOD_PD", CC2420_TOPTST, 4, 4},
+	/* ATEST mode: 0-7, we skip mode 8 */
+	{'a', "ATESTMOD_MODE[2:0]", CC2420_TOPTST, 2, 0},
 };
 
 void
@@ -437,6 +389,7 @@ field_update(char c, char op)
 		if(fp->cmd == c) {
 			reg = getreg(fp->addr);
 			fv = FV(reg, fp->msb, fp->lsb);
+			/* skip update when op char duplicates command char */
 			if(c != op) {
 				OP(fv, op);
 				fv = fv % (0x1<<(fp->msb - fp->lsb +1));
@@ -444,6 +397,7 @@ field_update(char c, char op)
 				setreg(fp->addr, reg);
 			}
 			printf("%s=%u\n", fp->name, fv);
+			return;
 		}
 	}
 }
