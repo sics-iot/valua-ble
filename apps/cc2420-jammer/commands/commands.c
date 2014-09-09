@@ -236,22 +236,6 @@ debug_analog(void)
 }
 /*---------------------------------------------------------------------------*/
 static void
-reverse_phase(void)
-{
-#define MOD_MODE_BIT 4
-#define MOD_MODE_BV (1<<MOD_MODE_BIT)
-	uint16_t reg = getreg(CC2420_MDMCTRL1);
-	if(reg & MOD_MODE_BV) {
-		reg &= ~MOD_MODE_BV;
-	} else {
-		reg |= MOD_MODE_BV;
-	}
-	setreg(CC2420_MDMCTRL1, reg);
-	reg = getreg(CC2420_MDMCTRL1);
-	printf("MODULATION_MODE: %u \n", (reg & MOD_MODE_BV)>>MOD_MODE_BIT);
-}
-/*---------------------------------------------------------------------------*/
-static void
 reverse_syncword(void)
 {
 		/* test: send with non-standard sync word to avoid causing synchronization */
@@ -269,42 +253,6 @@ reverse_syncword(void)
 	reg = getreg(CC2420_SYNCWORD);
 	printf("Syncword: 0x%X\n", reg);
 }
-/*---------------------------------------------------------------------------*/
-static void
-preamble_size_down(void)
-{
-#define PREAMBLE_LENGTH_MSB 3
-#define PREAMBLE_LENGTH_LSB 0
-	uint16_t reg = getreg(CC2420_MDMCTRL0);
-	uint16_t preamble_len = FV(reg, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB);
-	preamble_len = (preamble_len - 1) % 16;
-	setreg(CC2420_MDMCTRL0, SETFV(reg, preamble_len, PREAMBLE_LENGTH_MSB, PREAMBLE_LENGTH_LSB));
-	printf("Preamble length: %u bytes\n", preamble_len+1);
-}
-/*---------------------------------------------------------------------------*/
-/* the TX DACs data source is selected by DAC_SRC according to: */
-/* 0: Normal operation (from modulator). */
-/* 1: The DAC_I_O and DAC_Q_O override values below.- */
-/* 2: From ADC, most significant bits */
-/* 3: I/Q after digital down mixing and channel filtering. */
-/* 4: Full-spectrum White Noise (from CRC) */
-/* 5: From ADC, least significant bits */
-/* 6: RSSI / Cordic Magnitude Output */
-/* 7: HSSD module. */
-static void
-dac_src_up(void)
-{
-#define DAC_SRC_MSB 14
-#define DAC_SRC_LSB 12
-	uint16_t reg = getreg(CC2420_DACTST);
-	uint16_t dac_src = FV(reg, DAC_SRC_MSB, DAC_SRC_LSB);
-	dac_src = (dac_src + 1) % 8;
-
-	setreg(CC2420_DACTST, SETFV(reg, dac_src, DAC_SRC_MSB, DAC_SRC_LSB));
-	printf("DAC_SRC: %u\n", dac_src);
-
-}
-
 /*---------------------------------------------------------------------------*/
 static void
 mac_update(void)
@@ -361,9 +309,7 @@ const struct command command_table[] =	{
 	{'G', '\0', agc_vga_gain_up},
 	{'H', '\0', debug_hssd},
 	{'A', '\0', debug_analog},
-	{'P', '\0', reverse_phase},
 	{'S', '\0', reverse_syncword},
-	{'E', '\0', preamble_size_down},
 	{'M', '\0', mac_update},
 	{'L', '\0', show_all_registers},
 	{'\0', '\0', NULL},
@@ -390,7 +336,7 @@ do_command(char *s)
 	}
 	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'') && s[1] != '\0')
 		var_update(s[0], s[1]);
-	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>')
+	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]==s[0])
 		field_update(s[0], s[1]);
 	else {
 		const struct command *ptr = &command_table[0];
@@ -411,6 +357,8 @@ commands_set_callback(void (*f)(int))
 	callback = f;
 }
 
+/*-----------------------------------------------------------------------------*/ 
+// Generic user variable update operations
 void
 var_update(char op, char var)
 {
@@ -461,13 +409,26 @@ struct field
 const static struct field field_list[] = {
 	{'c', "CCAMUX", CC2420_IOCFG1, 4, 0},
 	{'s', "SFDMUX", CC2420_IOCFG1, 9, 5},
+/* the TX DACs data source is selected by DAC_SRC according to: */
+/* 0: Normal operation (from modulator). */
+/* 1: The DAC_I_O and DAC_Q_O override values below.- */
+/* 2: From ADC, most significant bits */
+/* 3: I/Q after digital down mixing and channel filtering. */
+/* 4: Full-spectrum White Noise (from CRC) */
+/* 5: From ADC, least significant bits */
+/* 6: RSSI / Cordic Magnitude Output */
+/* 7: HSSD module. */
 	{'d', "DAC_SRC", CC2420_DACTST, 14, 12},
 	{'g', "LNAMIX_GAINMODE_O", CC2420_AGCCTRL, 3, 2},
 	{'G', "VGA_GAIN", CC2420_AGCCTRL, 10, 4},
+/* Modulation mode: 0=normal, 1=reverse phase */
+	{'P', "MOD_MODE", CC2420_MDMCTRL1, 4, 4},
+/* Preamble length 0-15 => 1-16 bytes */
+	{'E', "PREAMBLE_LENGTH", CC2420_MDMCTRL0, 3, 0},
 };
 
 void
-	field_update(char c, char op)
+field_update(char c, char op)
 {
 	const struct field *fp;
 	unsigned reg, fv;
@@ -476,10 +437,12 @@ void
 		if(fp->cmd == c) {
 			reg = getreg(fp->addr);
 			fv = FV(reg, fp->msb, fp->lsb);
-			OP(fv, op);
-			fv = fv % (0x1<<(fp->msb - fp->lsb +1));
-			reg = SETFV(reg, fv, fp->msb, fp->lsb);
-			setreg(fp->addr, reg);
+			if(c != op) {
+				OP(fv, op);
+				fv = fv % (0x1<<(fp->msb - fp->lsb +1));
+				reg = SETFV(reg, fv, fp->msb, fp->lsb);
+				setreg(fp->addr, reg);
+			}
 			printf("%s=%u\n", fp->name, fv);
 		}
 	}
