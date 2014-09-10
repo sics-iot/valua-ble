@@ -20,6 +20,8 @@ extern int cc2420_packets_seen, cc2420_packets_read;
 
 static void (*callback)(int v);
 
+/* TODO: add a "help" command */
+/* TODO: a battery voltage reading command: scan through 32 BATTMON_VOLTAGE levels to find level at which the BATTMON_OK toggles, the convert to volt based formular in datasheet */
 // Individual command handlers
 static void
 reboot(void)
@@ -377,6 +379,14 @@ const static struct field field_list[] = {
 	{'A', "ATESTMOD_PD", CC2420_TOPTST, 4, 4},
 	/* ATEST mode: 0-7, we skip mode 8 */
 	{'a', "ATESTMOD_MODE[2:0]", CC2420_TOPTST, 2, 0},
+	{'K', "ADR_DECODE", CC2420_MDMCTRL0, 11, 11},
+	{'k', "AUTOACK", CC2420_MDMCTRL0, 4, 4},
+	{'B', "BATTMON_EN", CC2420_BATTMON, 5, 5},
+	{'b', "BATTMON_VOLTAGE", CC2420_BATTMON, 4, 0},
+	{'O', "BATTMON_OK", CC2420_BATTMON, 6, 6}, // read-only
+	{'F', "FIFO_THR", CC2420_IOCFG0, 6, 0},
+	{'I', "ADC_I", CC2420_ADCTST, 14, 8},
+	{'Q', "ADC_Q", CC2420_ADCTST, 6, 0},
 };
 
 void
