@@ -434,6 +434,7 @@ field_update(char c, char op)
 				fv = fv % (0x1<<(fp->msb - fp->lsb +1));
 				reg = SETFV(reg, fv, fp->msb, fp->lsb);
 				setreg(fp->addr, reg);
+				fv = FV(getreg(fp->addr), fp->msb, fp->lsb);
 			}
 			printf("%s=%u\n", fp->name, fv);
 			return;
