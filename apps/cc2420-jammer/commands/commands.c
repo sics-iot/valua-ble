@@ -235,6 +235,14 @@ help(void)
  /* TODO: */
 }
 
+static void
+status(void)
+{
+  uint8_t status;
+  CC2420_GET_STATUS(status);
+	printf("0x%01X", status);
+}
+
 /*---------------------------------------------------------------------------*/
 static const struct command command_table[] =	{
 	{'h', help},
@@ -252,6 +260,7 @@ static const struct command command_table[] =	{
 	{'S', reverse_syncword},
 	{'M', mac_update},
 	{'L', show_all_registers},
+	{'s', status}
 };
 
 static void
@@ -296,7 +305,7 @@ print_reg(const char* hex_str)
 		printf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits));
 	} else if(addr < CC2420_foo) {
 		printf("Strobe 0x%02X\n", addr);
-		strobe(addr);
+		CC2420_STROBE(addr);
 	} else {
 		printf("Unknown register: 0x%s\n", hex_str);
 	}
