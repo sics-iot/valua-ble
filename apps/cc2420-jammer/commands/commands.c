@@ -415,7 +415,7 @@ const static struct field field_list[] = {
 	{'I', "ADC_I", CC2420_ADCTST, 14, 8},
 	{'Q', "ADC_Q", CC2420_ADCTST, 6, 0},
 	{'e', "RESETn", CC2420_MAIN, 15, 15}, // wrtie '0' to reset radio
-
+	{'R', "RESERVED", CC2420_RESERVED, 15, 0},
 };
 
 void
