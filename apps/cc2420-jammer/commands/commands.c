@@ -259,6 +259,37 @@ exec_command(char c)
 	}
 }
 
+
+static unsigned
+hexstr_to_unsigned(const char *s)
+{
+	unsigned n,m;
+
+	for(n=0;(*s>='0' && *s<='9')||(*s>='a' && *s<='f')||(*s>='A' && *s<='F');s++) {
+		if(*s>='0' && *s<='9') {m=*s-'0';}
+		else if(*s>='a' && *s<='f') {m=*s-'a'+10;}
+		else {m=*s-'A'+10;}
+		n=n*16+m;
+	}
+
+	return n;
+}
+
+static void
+print_reg(const char* hex_str)
+{
+	uint16_t reg;
+	enum cc2420_register addr;
+	char bits[17]; //16 bits + '\0'
+	
+	addr = hexstr_to_unsigned(hex_str);
+  if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) {
+		reg = getreg(addr);
+		printf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits));
+	} else 
+		printf("Unknown register: 0x%s\n", hex_str);
+}
+
 void
 do_command(char *s)
 {
@@ -277,8 +308,7 @@ do_command(char *s)
 	else if (s[0]==s[1]) {exec_command(s[0]);}
 	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
 	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]=='\0') {field_update(s[0], s[1]);}
-	else {
-	}
+	else if(s[0]=='x') {print_reg(&s[1]);}
 }
 
 void
@@ -410,3 +440,4 @@ field_update(char c, char op)
 		}
 	}
 }
+
