@@ -240,7 +240,7 @@ status(void)
 {
   uint8_t status;
   CC2420_GET_STATUS(status);
-	printf("0x%01X", status);
+	printf("0x%01X\n", status);
 }
 
 /*---------------------------------------------------------------------------*/
