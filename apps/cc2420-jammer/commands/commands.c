@@ -273,12 +273,11 @@ do_command(char *s)
 		strncpy(last_cmd, s, sizeof(last_cmd));
 	}
 
-	if(s[1] == '\0') {
-		if(s[0] >= '0' && s[0] <= '9' && callback != NULL)	{callback(s[0] - '0');}
-		else {exec_command(s[0]);}
-	} else {
-		if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
-		else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]==s[0])	{field_update(s[0], s[1]);}
+	if(s[0] >= '0' && s[0] <= '9' && callback != NULL)	{callback(s[0] - '0');}
+	else if (s[0]==s[1]) {exec_command(s[0]);}
+	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
+	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]=='\0') {field_update(s[0], s[1]);}
+	else {
 	}
 }
 
@@ -399,8 +398,8 @@ field_update(char c, char op)
 		if(fp->cmd == c) {
 			reg = getreg(fp->addr);
 			fv = FV(reg, fp->msb, fp->lsb);
-			/* skip update when op char duplicates command char */
-			if(c != op) {
+			/* skip update when no op */
+			if(op != '\0') {
 				OP(fv, op);
 				fv = fv % (0x1<<(fp->msb - fp->lsb +1));
 				reg = SETFV(reg, fv, fp->msb, fp->lsb);
