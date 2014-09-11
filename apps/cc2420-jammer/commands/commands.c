@@ -254,11 +254,10 @@ do_command(char *s)
 	static char last_cmd[2];
 	static char last_last_cmd[2];
 
-	if(s[0] == '\0') {
-		s = &last_cmd[0];
-	} else if(s[0] == '~') {
-		s = &last_last_cmd[0];
-	} else {
+	/* update command history */
+	if(s[0] == '\0') {s = &last_cmd[0];}
+	else {
+		if(s[0] == '~') {strncpy(s, last_last_cmd, sizeof(last_last_cmd));}
 		strncpy(last_last_cmd, last_cmd, sizeof(last_last_cmd));
 		strncpy(last_cmd, s, sizeof(last_cmd));
 	}
