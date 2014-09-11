@@ -229,8 +229,15 @@ show_all_registers(void)
 	}
 }
 
+static void
+help(void)
+{
+ /* TODO: */
+}
+
 /*---------------------------------------------------------------------------*/
 static const struct command command_table[] =	{
+	{'h', help},
 	{'e', reboot},
 	{'u', power_up},
 	{'d', power_down},
@@ -283,11 +290,16 @@ print_reg(const char* hex_str)
 	char bits[17]; //16 bits + '\0'
 	
 	addr = hexstr_to_unsigned(hex_str);
+  /* if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) { */
   if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) {
 		reg = getreg(addr);
 		printf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits));
-	} else 
+	} else if(addr < CC2420_foo) {
+		printf("Strobe 0x%02X\n", addr);
+		strobe(addr);
+	} else {
 		printf("Unknown register: 0x%s\n", hex_str);
+	}
 }
 
 void
