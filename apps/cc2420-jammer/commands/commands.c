@@ -230,7 +230,7 @@ show_all_registers(void)
 }
 
 /*---------------------------------------------------------------------------*/
-const struct command command_table[] =	{
+static const struct command command_table[] =	{
 	{'e', reboot},
 	{'u', power_up},
 	{'d', power_down},
@@ -245,8 +245,19 @@ const struct command command_table[] =	{
 	{'S', reverse_syncword},
 	{'M', mac_update},
 	{'L', show_all_registers},
-	{'\0', NULL},
 };
+
+static void
+exec_command(char c)
+{
+	const struct command *ptr = &command_table[0];
+	for(;ptr<command_table+sizeof(command_table)/sizeof(struct command);ptr++) {
+		if(c == ptr->ch) {
+			ptr->f();
+			return;
+		}
+	}
+}
 
 void
 do_command(char *s)
@@ -262,24 +273,12 @@ do_command(char *s)
 		strncpy(last_cmd, s, sizeof(last_cmd));
 	}
 
-	if(s[0] >= '0' && s[0] <= '9' && callback != NULL) {
-		callback(s[0] - '0');
-		return;
-	}
-	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'') && s[1] != '\0')
-		var_update(s[0], s[1]);
-	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]==s[0])
-		field_update(s[0], s[1]);
-	else {
-		const struct command *ptr = &command_table[0];
-		while(ptr->f != NULL) {
-			if(s[0] == ptr->ch1) {
-				ptr->f();
-				return;
-			}
-			++ptr;
-		}
-		printf("unkown command: %c\n", s[0]);
+	if(s[1] == '\0') {
+		if(s[0] >= '0' && s[0] <= '9' && callback != NULL)	{callback(s[0] - '0');}
+		else {exec_command(s[0]);}
+	} else {
+		if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
+		else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]==s[0])	{field_update(s[0], s[1]);}
 	}
 }
 
