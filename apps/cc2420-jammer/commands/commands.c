@@ -2,9 +2,9 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "dev/cc2420.h"
-#include "dev/cc2420_const.h"
-#include "net/rime.h"
+#include "dev/cc2420/cc2420.h"
+#include "dev/cc2420/cc2420_const.h"
+#include "net/rime/rime.h"
 #include "dev/watchdog.h"
 
 #include "commands.h"

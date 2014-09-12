@@ -45,14 +45,13 @@
 
 #include "dev/leds.h"
 #include "dev/spi.h"
-#include "dev/cc2420.h"
-#include "dev/cc2420_const.h"
+#include "dev/cc2420/cc2420.h"
+#include "dev/cc2420/cc2420_const.h"
 
 #include "net/packetbuf.h"
 #include "net/rime/rimestats.h"
 #include "net/netstack.h"
 
-#include "sys/timetable.h"
 #include "cc2420-jammer.h"
 
 #define WITH_SEND_CCA 0

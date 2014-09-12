@@ -36,7 +36,7 @@
 #include "contiki-net.h"
 
 #include "dev/spi.h"
-#include "dev/cc2420.h"
+#include "dev/cc2420/cc2420.h"
 #include "isr_compat.h"
 #include "cc2420-jammer.h"
 
