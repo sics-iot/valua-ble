@@ -40,7 +40,7 @@
 #include "lib/list.h"
 
 #define DEBUG DEBUG_NONE
-#include "net/uip-debug.h"
+#include "net/ip/uip-debug.h"
 
 #include "antelope.h"
 #include "attribute.h"
@@ -89,6 +89,11 @@ index_create(index_type_t index_type, relation_t *rel, attribute_t *attr)
   cardinality = relation_cardinality(rel);
   if(cardinality == INVALID_TUPLE) {
     return DB_STORAGE_ERROR;
+  }
+
+  if(attr->domain != DOMAIN_INT && attr->domain != DOMAIN_LONG) {
+    PRINTF("DB: Cannot create an index for a non-number attribute!\n");
+    return DB_INDEX_ERROR;
   }
 
   api = find_index_api(index_type);

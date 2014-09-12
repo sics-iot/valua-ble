@@ -17,21 +17,27 @@
 *.esb
 *.avr-raven
 *.exp5438
-*.mb851
+*.mbxxx
 *.win32
 *.apple2enh
-*.atari
+*.atarixl
 *.c128
 *.c64
+*.cc2538dk
+*.ev-aducrf101mkxz
 *.report
 summary
 *.summary
 *.faillog
+*.orig
+*~
+.DS_Store
 obj_*
 symbols.*
 Makefile.target
 doc/html
 patches-*
+tools/tunslip
 tools/tunslip6
 build
 tools/coffee-manager/build/
@@ -77,3 +83,10 @@ contiki-cc2530dk.lib
 *.d64
 *.d71
 *.d81
+
+#regression tests artifacts
+*.testlog
+
+# rl78 build artifacts
+*.eval-adf7xxxmb4z
+*.eval-adf7xxxmb4z.srec

@@ -5,12 +5,12 @@ CONTIKI_TARGET_SOURCEFILES += contiki-wismote-platform.c \
 #ARCH=spi.c ds2411.c xmem.c i2c.c node-id.c sensors.c cfs-coffee.c \
      cc2520.c cc2520-arch.c cc2520-arch-sfd.c \
      sky-sensors.c uip-ipchksum.c \
-     checkpoint-arch.c uart1.c slip_uart1.c uart1-putchar.c
+     uart1.c slip_uart1.c uart1-putchar.c
 
 ARCH=spi.c i2c.c node-id.c sensors.c cfs-coffee.c sht15.c \
      cc2520.c cc2520-arch.c cc2520-arch-sfd.c \
      sky-sensors.c uip-ipchksum.c \
-     checkpoint-arch.c uart1.c slip_uart1.c uart1-putchar.c
+     uart1.c slip_uart1.c uart1-putchar.c
 
 
 CONTIKI_TARGET_DIRS = . dev apps net
@@ -32,60 +32,28 @@ CONTIKI_TARGET_SOURCEFILES += $(ARCH) $(UIPDRIVERS)
 
 MCU=msp430f5437
 
-ifndef WITH_JTAG
-# Flag set to avoid writing on the bootloader flash space
-LDFLAGS += -Wl,-Ttext=0x8000
-CFLAGS += -Wl,-Ttext=0x8000
-endif
+# Platform has a MSP430X MCU with 20-bit support
+CPU_HAS_MSP430X=1
 
 include $(CONTIKI)/cpu/msp430/Makefile.msp430
 
 ifdef IAR
-
- LDFLAGSNO += -xm "$(IAR_PATH)/lib/dlib/dl430xsfn.r43" -f "$(IAR_PATH)/config/lnk430f5437.xcl"
- LDFLAGS += $(LDFLAGSNO) -Felf -yn
-
-else # IAR
-
- ifndef MSPGCC_VERSION
-  MSPGCC_VERSION := ${shell $(CC) -dumpversion}
- endif
-
- ifneq (,$(findstring 4.7.,$(MSPGCC_VERSION)))
-  # 20 bits flags for compilation (supported from mspgcc 4.7.0)
-  CFLAGS += -mmemory-model=large -mcode-region=far -mdata-region=far -msr20 -mc20 -md20
-  LDFLAGS += -mmemory-model=large -mcode-region=far -mdata-region=far -msr20 -mc20 -md20
- endif
-
-endif # IAR
+LDFLAGSNO += -xm "$(IAR_PATH)/lib/dlib/dl430xsfn.r43" -f "$(IAR_PATH)/config/lnk430f5437.xcl"
+LDFLAGS += $(LDFLAGSNO) -Felf -yn
+endif
 
 contiki-$(TARGET).a: ${addprefix $(OBJECTDIR)/,symbols.o}
 #	$(AR) rcf $@ $^
-
-ifndef UPORT
-UPORT=/dev/ttyUSB0
-endif
-
-ifdef WITH_JTAG
 
 %.hex: %.ihex
 	mv $< $@
 
 %.upload: %.hex
-	msp430flasher -n $(MCU) -e ERASE_MAIN -w $< -v -z [VCC]
+	msp430flasher -n msp430x5437 -e ERASE_MAIN -w $< -v -z [VCC]
 
 %.upload-clean: %.hex
-	msp430flasher -n $(MCU) -w $< -v -z [VCC]
+	msp430flasher -n msp430x5437 -w $< -v -z [VCC]
 
-else # WITH_JTAG
-
-%.titext: %.ihex
-	  python -m msp430.memory.convert -i ihex -f titext $< -o $@
-
-%.upload: %.titext
-	python -m msp430.bsl5.uart -p $(UPORT) --erase=0x8000-0x3FFFF $<
-
-endif # WITH_JTAG
-
-login:
-	$(CONTIKI)/tools/sky/serialdump-linux -b115200 $(UPORT)
+MODULES += core/net core/net/ip core/net/ipv6 core/net/ipv4 core/net/mac \
+           core/net/rime core/net/mac/contikimac core/net/rpl \
+           dev/cc2520 dev/sht11

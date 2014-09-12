@@ -68,16 +68,17 @@ STRIP    = strip
 ifndef DEBUG
 OPTI = -Ohz --no_unroll
 endif
-CFLAGSNO = --endian=little --cpu=Cortex-M3 -e --diag_suppress Pa050 -D BOARD_HEADER=\"board.h\" \
+CFLAGSNO = --debug --endian=little --cpu=Cortex-M3 -e --diag_suppress Pa050 -D BOARD_HEADER=\"board.h\" \
 			-D BOARD_MB851 -D "PLATFORM_HEADER=\"hal/micro/cortexm3/compiler/iar.h\""  -D CORTEXM3 \
 			-D CORTEXM3_STM32W108 -D PHY_STM32W108XX -D DISABLE_WATCHDOG -D ENABLE_ADC_EXTENDED_RANGE_BROKEN \
 			-D __SOURCEFILE__=\"$*.c\" -lC $(OBJECTDIR) \
+			-I $(CONTIKI)/../iar-files \
 			-I $(IAR_PATH)/arm/inc --dlib_config=DLib_Config_Normal.h
 
-CFLAGS  += $(CFLAGSNO) $(OPTI)
+CFLAGS  += $(CFLAGSNO) $(OPTI) -D__ICCARM__ 
 AROPTS  = --create
 ASFLAGS = -s+ -w+ --cpu Cortex-M3 -L$(OBJECTDIR)
-LDFLAGS += --redirect _Printf=_PrintfSmall --redirect _Scanf=_ScanfSmall --map=contiki-$(TARGET).map
+LDFLAGS += --semihosting --redirect _Printf=_PrintfSmall --redirect _Scanf=_ScanfSmall --map=contiki-$(TARGET).map
  ifndef COFFEE
   LDFLAGS+= --config $(CONTIKI_CPU)/iar-cfg.icf
  endif
@@ -97,19 +98,34 @@ ifndef DEBUG
 OPTI = -Os -ffunction-sections 
 endif
 
+ifeq ($(STM32W_CPUREV), CC)
+  LD-EXT=-stm32w108CC
+  RAM_SIZE = 2*8192
+  FLASH_SIZE = 2*128*1024
+ ${warning "using stm32w108CC specific ld file"}
+else ifeq ($(STM32W_CPUREV), xB)
+  LD-EXT=-stm32w108xB
+  RAM_SIZE = 8192
+  FLASH_SIZE = 128*1024
+ ${warning "using stm32w108xB specific ld file"}
+else
+ ${error "Bad STM32W_CPUREV value or no STM32W_CPUREV value specified. Cpu revision should be specified. Please read cpu/stm32w108/README.txt for more details."}
+endif
+
 CFLAGSNO = -mthumb -mcpu=cortex-m3 -D "PLATFORM_HEADER=\"hal/micro/cortexm3/compiler/gnu.h\"" \
 			-D BOARD_HEADER=\"board.h\" -g -Wall -Wno-strict-aliasing -mlittle-endian \
-			-D BOARD_MB851   -D CORTEXM3 -D CORTEXM3_STM32W108 -D PHY_STM32W108XX -D DISABLE_WATCHDOG -D ENABLE_ADC_EXTENDED_RANGE_BROKEN \
+			-D CORTEXM3 -D CORTEXM3_STM32W108 -D PHY_STM32W108XX -D DISABLE_WATCHDOG -D ENABLE_ADC_EXTENDED_RANGE_BROKEN \
 			-D __SOURCEFILE__=\"$*.c\"
 CFLAGS  += $(CFLAGSNO) $(OPTI)
 ASFLAGS = -mthumb -mcpu=cortex-m3 -c -g -Wall -Os -ffunction-sections \
 	    -mlittle-endian -fshort-enums -x assembler-with-cpp -Wa,-EL
 
 ifndef CPU_LD_CONFIG
-CPU_LD_CONFIG=$(CONTIKI_CPU)/gnu.ld
+CPU_LD_CONFIG=$(CONTIKI_CPU)/gnu$(LD-EXT).ld
 endif # CPU_LD_CONFIG
 
-LDFLAGS += -mcpu=cortex-m3 \
+LDFLAGS +=  -L$(CONTIKI_CPU)\
+	    -mcpu=cortex-m3 \
 	    -mthumb  \
 	    -Wl,-T -Xlinker $(CPU_LD_CONFIG) \
 	    -Wl,-static \
@@ -195,8 +211,6 @@ endif
 
 ### Custom rules
 
-OBJECTDIR = obj_$(TARGET)
-
 ssubst = ${patsubst %.s,%.o,${patsubst %.s79,%.o,$(1)}}
 
 CONTIKI_OBJECTFILES += ${addprefix $(OBJECTDIR)/,${call ssubst, $(STM32W_S)}}
@@ -216,19 +230,22 @@ endif
 
 
 CUSTOM_RULE_C_TO_OBJECTDIR_O = 1
-$(OBJECTDIR)/%.o: %.c
-	$(CC) $(CFLAGS) $< --dependencies=m $(@:.o=.P) -o $@
+$(OBJECTDIR)/%.o: %.c | $(OBJECTDIR)
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) $< --dependencies=m $(@:.o=.P) -o $@
 	@$(SEDCOMMAND); rm -f $(@:.o=.P)
 	@$(FINALIZE_DEPENDENCY)
 
 CUSTOM_RULE_C_TO_CO = 1
 %.co: %.c
-	$(CC) $(CFLAGS) -DAUTOSTART_ENABLE $< -o $@
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) -DAUTOSTART_ENABLE $< -o $@
 else #IAR
 
 CUSTOM_RULE_C_TO_CE = 1
 %.ce: %.c
-	$(CC) $(CFLAGS) -fno-merge-constants -fno-function-sections -DAUTOSTART_ENABLE -c $< -o $@
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) -fno-merge-constants -fno-function-sections -DAUTOSTART_ENABLE -c $< -o $@
 	$(STRIP) --strip-unneeded -g -x $@
 
 CUSTOM_RULE_LINK = 1
@@ -247,12 +264,14 @@ symbols.c symbols.h:
 endif
 
 %.$(TARGET): %.co $(PROJECT_OBJECTFILES) $(PROJECT_LIBRARIES) contiki-$(TARGET).a $(OBJECTDIR)/symbols.o
-	$(LD) $(LDFLAGS) $(TARGET_STARTFILES) ${filter-out %.a,$^} -Wl,-\( ${filter %.a,$^} $(TARGET_LIBFILES) -Wl,-\) -o $@
+	$(TRACE_LD)
+	$(Q)$(LD) $(LDFLAGS) $(TARGET_STARTFILES) ${filter-out %.a,$^} -Wl,-\( ${filter %.a,$^} $(TARGET_LIBFILES) -Wl,-\) -o $@
 	@echo >> contiki-$(TARGET).map
 	@$(SIZE) $(SIZEFLAGS) $@ >> contiki-$(TARGET).map
 
 #%.$(TARGET): %.co $(PROJECT_OBJECTFILES) $(PROJECT_LIBRARIES) $(CONTIKI_OBJECTFILES)
-#	$(LD) $(LDFLAGS) $(TARGET_STARTFILES) ${filter-out %.a,$^} ${filter %.a,$^} $(TARGET_LIBFILES) -o $@
+#	$(TRACE_LD)
+#	$(Q)$(LD) $(LDFLAGS) $(TARGET_STARTFILES) ${filter-out %.a,$^} ${filter %.a,$^} $(TARGET_LIBFILES) -o $@
 #	@echo "\n" >> contiki-$(TARGET).map
 #	@$(SIZE) $(SIZEFLAGS) $@ >> contiki-$(TARGET).map
 
@@ -270,11 +289,13 @@ stm-motelist:
 stm-motes:
 	@echo $(MOTES)
 
-$(OBJECTDIR)/%.o: %.s79
-	$(AS) $(ASFLAGS) -o $@ $<
+$(OBJECTDIR)/%.o: %.s79 | $(OBJECTDIR)
+	$(TRACE_AS)
+	$(Q)$(AS) $(ASFLAGS) -o $@ $<
 
-$(OBJECTDIR)/%.o: %.s
-	$(AS) $(ASFLAGS) -o $@ $<
+$(OBJECTDIR)/%.o: %.s | $(OBJECTDIR)
+	$(TRACE_AS)
+	$(Q)$(AS) $(ASFLAGS) -o $@ $<
 
 %.bin: %.$(TARGET)
 	$(OBJCOPY) $(OBJOPTS) $< $@
@@ -302,9 +323,13 @@ endif
 
 # a target that gives a user-friendly memory profile, taking into account the RAM
 # that is statically occupied by the stack as defined in cpu/stm32w108/gnu.ld
-RAM_SIZE = 8192
-FLASH_SIZE = 128*1024
 STACK_SIZE = 1280
+ifndef RAM_SIZE
+ ${error no ram size configured}
+endif
+ifndef FLASH_SIZE
+ ${error no flash size configured}
+endif
 %.size: %.$(TARGET)
 	@size -A $< | egrep "data|bss" | awk '{s+=$$2} END {s=s+$(STACK_SIZE); f=$(RAM_SIZE)-s; printf "[RAM]   used %6d, free %6d\n",s,f;}'
 	@size -A $< | egrep "text|isr_vector" | awk '{s+=$$2} END {f=$(FLASH_SIZE)-s; printf "[Flash] used %6d, free %6d\n",s,f;}'

@@ -39,8 +39,8 @@
  *         Simon Barner <barner@in.tum.de>
  */
 
-#ifndef __CONTIKI_CONF_H__
-#define __CONTIKI_CONF_H__
+#ifndef CONTIKI_CONF_H_
+#define CONTIKI_CONF_H_
 
 /* Platform name, type, and MCU clock rate */
 #define PLATFORM_NAME  "Zigbit"
@@ -50,6 +50,11 @@
 #endif
 
 #include <stdint.h>
+#include <avr/eeprom.h>
+
+/* Skip the last four bytes of the EEPROM, to leave room for things
+ * like the avrdude erase count and bootloader signaling. */
+#define EEPROM_CONF_SIZE		((E2END + 1) - 4)
 
 /* The AVR tick interrupt usually is done with an 8 bit counter around 128 Hz.
  * 125 Hz needs slightly more overhead during the interrupt, as does a 32 bit
@@ -86,8 +91,11 @@ void clock_adjust_ticks(clock_time_t howmany);
 
 #define CCIF
 #define CLIF
+#ifndef CC_CONF_INLINE
+#define CC_CONF_INLINE inline
+#endif
 
-#define RIMEADDR_CONF_SIZE       8
+#define LINKADDR_CONF_SIZE       8
 #define PACKETBUF_CONF_HDR_SIZE    0
 
 //define UIP_CONF_IPV6            1 //Let the makefile do this, allows hello-world to compile
@@ -155,7 +163,6 @@ void clock_adjust_ticks(clock_time_t howmany);
 #define UIP_CONF_IPV6_REASSEMBLY 0
 #define UIP_CONF_NETIF_MAX_ADDRESSES  3
 #define UIP_CONF_ND6_MAX_PREFIXES     3
-#define UIP_CONF_ND6_MAX_NEIGHBORS    4  
 #define UIP_CONF_ND6_MAX_DEFROUTERS   2
 #define UIP_CONF_UDP_CHECKSUMS   1
 #define UIP_CONF_TCP_SPLIT       1
@@ -172,4 +179,4 @@ typedef unsigned short uip_stats_t;
 typedef unsigned long off_t;
 
 
-#endif /* __CONTIKI_CONF_H__ */
+#endif /* CONTIKI_CONF_H_ */

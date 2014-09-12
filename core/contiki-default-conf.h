@@ -114,7 +114,7 @@
 /* UIP_CONF_IPV6 specifies whether or not IPv6 should be used. If IPv6
    is not used, IPv4 is used instead. */
 #ifndef UIP_CONF_IPV6
-#define UIP_CONF_IPV6 1
+#define UIP_CONF_IPV6 0
 #endif /* UIP_CONF_IPV6 */
 
 /* UIP_CONF_BUFFER_SIZE specifies how much memory should be reserved
@@ -174,6 +174,17 @@
 #define UIP_CONF_TCP_SPLIT 0
 #endif /* UIP_CONF_TCP_SPLIT */
 
+/* NBR_TABLE_CONF_MAX_NEIGHBORS specifies the maximum number of neighbors
+   that each node will be able to handle. */
+#ifndef NBR_TABLE_CONF_MAX_NEIGHBORS
+#define NBR_TABLE_CONF_MAX_NEIGHBORS 8
+#endif /* NBR_TABLE_CONF_MAX_NEIGHBORS */
+
+/* UIP_CONF_ND6_SEND_NA enables standard IPv6 Neighbor Discovery Protocol.
+   This is unneeded when RPL is used. Disable to save ROM and a little RAM. */
+#ifndef UIP_CONF_ND6_SEND_NA
+#define UIP_CONF_ND6_SEND_NA 1
+#endif /* UIP_CONF_ND6_SEND_NA */
 
 /*---------------------------------------------------------------------------*/
 /* 6lowpan configuration options.

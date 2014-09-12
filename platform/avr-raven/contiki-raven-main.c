@@ -69,7 +69,7 @@ unsigned char debugflowsize,debugflow[DEBUGFLOWSIZE];
 #include "radio/rf230bb/rf230bb.h"
 #include "net/mac/frame802154.h"
 #include "net/mac/framer-802154.h"
-#include "net/sicslowpan.h"
+#include "net/ipv6/sicslowpan.h"
 
 #else                 //radio driver using Atmel/Cisco 802.15.4'ish MAC
 #include <stdbool.h>
@@ -106,7 +106,7 @@ unsigned char debugflowsize,debugflow[DEBUGFLOWSIZE];
 #include "net/rime/rime-udp.h"
 #endif
 
-#include "net/rime.h"
+#include "net/rime/rime.h"
 
 #include "params.h"
 
@@ -260,14 +260,14 @@ uint8_t i;
 
   /* Set addresses BEFORE starting tcpip process */
 
-  rimeaddr_t addr;
+  linkaddr_t addr;
   if (params_get_eui64(addr.u8)) {
       PRINTA("Random EUI64 address generated\n");
   }
  
 #if UIP_CONF_IPV6 
-  memcpy(&uip_lladdr.addr, &addr.u8, sizeof(rimeaddr_t));
-  rimeaddr_set_node_addr(&addr);  
+  memcpy(&uip_lladdr.addr, &addr.u8, sizeof(linkaddr_t));
+  linkaddr_set_node_addr(&addr);  
   rf230_set_pan_addr(params_get_panid(),params_get_panaddr(),(uint8_t *)&addr.u8);
 #elif WITH_NODE_ID
   node_id=get_panaddr_from_eeprom();
@@ -275,10 +275,10 @@ uint8_t i;
   addr.u8[0]=(node_id&0xff00)>>8;
   PRINTA("Node ID from eeprom: %X\n",node_id);
   uint16_t inv_node_id=((node_id&0xff00)>>8)+((node_id&0xff)<<8); // change order of bytes for rf23x
-  rimeaddr_set_node_addr(&addr);
+  linkaddr_set_node_addr(&addr);
   rf230_set_pan_addr(params_get_panid(),inv_node_id,NULL);
 #else
-  rimeaddr_set_node_addr(&addr);
+  linkaddr_set_node_addr(&addr);
   rf230_set_pan_addr(params_get_panid(),params_get_panaddr(),(uint8_t *)&addr.u8);
 #endif
   rf230_set_channel(params_get_channel());
@@ -289,7 +289,7 @@ uint8_t i;
 #else
   PRINTA("MAC address ");
   uint8_t i;
-  for (i=sizeof(rimeaddr_t); i>0; i--){
+  for (i=sizeof(linkaddr_t); i>0; i--){
     PRINTA("%x:",addr.u8[i-1]);
   }
   PRINTA("\n");
@@ -429,6 +429,9 @@ ipaddr_add(const uip_ipaddr_t *addr)
 int
 main(void)
 {
+#if UIP_CONF_IPV6
+  uip_ds6_nbr_t *nbr;
+#endif /* UIP_CONF_IPV6 */
   initialize();
 
   while(1) {
@@ -510,8 +513,6 @@ if ((clocktime%PINGS)==1) {
 #if ROUTES && UIP_CONF_IPV6
 if ((clocktime%ROUTES)==2) {
       
-extern uip_ds6_nbr_t uip_ds6_nbr_cache[];
-extern uip_ds6_route_t uip_ds6_routing_table[];
 extern uip_ds6_netif_t uip_ds6_if;
 
   uint8_t i,j;
@@ -522,30 +523,26 @@ extern uip_ds6_netif_t uip_ds6_if;
       PRINTF("\n");
     }
   }
-  PRINTF("\nNeighbors [%u max]\n",UIP_DS6_NBR_NB);
-  for(i = 0,j=1; i < UIP_DS6_NBR_NB; i++) {
-    if(uip_ds6_nbr_cache[i].isused) {
-      ipaddr_add(&uip_ds6_nbr_cache[i].ipaddr);
-      PRINTF("\n");
-      j=0;
-    }
+  PRINTF("\nNeighbors [%u max]\n",NBR_TABLE_MAX_NEIGHBORS);
+  for(nbr = nbr_table_head(ds6_neighbors);
+      nbr != NULL;
+      nbr = nbr_table_next(ds6_neighbors, nbr)) {
+    ipaddr_add(&nbr->ipaddr);
+    PRINTF("\n");
+    j=0;
   }
   if (j) PRINTF("  <none>");
   {
     uip_ds6_route_t *r;
     PRINTF("\nRoutes [%u max]\n",UIP_DS6_ROUTE_NB);
     j = 1;
-    for(r = uip_ds6_route_list_head();
+    for(r = uip_ds6_route_head();
         r != NULL;
-        r = list_item_next(r)) {
+        r = uip_ds6_route_next(r)) {
       ipaddr_add(&r->ipaddr);
       PRINTF("/%u (via ", r->length);
-      ipaddr_add(&r->nexthop);
- //     if(uip_ds6_routing_table[i].state.lifetime < 600) {
-      PRINTF(") %lus\n", r->state.lifetime);
-      //     } else {
-      //       PRINTF(")\n");
-      //     }
+      ipaddr_add(uip_ds6_route_nexthop(r));
+       PRINTF(") %lus\n", r->state.lifetime);
       j = 0;
     }
   }

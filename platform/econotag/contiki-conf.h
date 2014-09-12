@@ -45,8 +45,8 @@
  *         Mariano Alvira <mar@devl.org>
  */
 
-#ifndef __CONTIKI_CONF_H__
-#define __CONTIKI_CONF_H__
+#ifndef CONTIKI_CONF_H_
+#define CONTIKI_CONF_H_
 
 #include <stdint.h>
 
@@ -106,7 +106,7 @@
 #define PLATFORM_HAS_LEDS 1
 #define PLATFORM_HAS_BUTTON 1
 
-#define RIMEADDR_CONF_SIZE              8
+#define LINKADDR_CONF_SIZE              8
 
 #if WITH_UIP6
 /* Network setup for IPv6 */
@@ -126,7 +126,7 @@
 
 #define NETSTACK_CONF_NETWORK rime_driver
 #define NETSTACK_CONF_MAC     csma_driver
-#define NETSTACK_CONF_RDC     sicslowmac_driver
+#define NETSTACK_CONF_RDC     nullrdc_driver
 #define NETSTACK_CONF_RADIO   contiki_maca_driver
 #define NETSTACK_CONF_FRAMER  framer_802154
 
@@ -142,7 +142,7 @@
 #define XMAC_CONF_COMPOWER               0
 #define CXMAC_CONF_COMPOWER              0
 
-#define COLLECT_NEIGHBOR_CONF_MAX_NEIGHBORS      32
+#define COLLECT_NBR_TABLE_CONF_MAX_NEIGHBORS      32
 
 #endif /* WITH_UIP6 */
 
@@ -171,15 +171,20 @@
 
 #ifdef WITH_UIP6
 
-#define RIMEADDR_CONF_SIZE              8
+#define LINKADDR_CONF_SIZE              8
 
 #define UIP_CONF_LL_802154              1
 #define UIP_CONF_LLH_LEN                0
 
+#ifndef UIP_CONF_ROUTER
 #define UIP_CONF_ROUTER                 1  
-#define UIP_CONF_IPV6_RPL               1
+#endif
 
-#define UIP_CONF_DS6_NBR_NBU     30
+#ifndef UIP_CONF_IPV6_RPL
+#define UIP_CONF_IPV6_RPL               1
+#endif
+
+#define NBR_TABLE_CONF_MAX_NEIGHBORS     30
 #define UIP_CONF_MAX_ROUTES   30
 
 #define UIP_CONF_ND6_SEND_RA		0
@@ -192,7 +197,6 @@
 #define UIP_CONF_IPV6_REASSEMBLY        0
 #define UIP_CONF_NETIF_MAX_ADDRESSES    3
 #define UIP_CONF_ND6_MAX_PREFIXES       3
-#define UIP_CONF_ND6_MAX_NEIGHBORS      4
 #define UIP_CONF_ND6_MAX_DEFROUTERS     2
 #define UIP_CONF_IP_FORWARD             0
 #define UIP_CONF_BUFFER_SIZE		1300
@@ -239,4 +243,4 @@
 #include PROJECT_CONF_H
 #endif /* PROJECT_CONF_H */
 
-#endif /* __CONTIKI_CONF_H__ */
+#endif /* CONTIKI_CONF_H_ */

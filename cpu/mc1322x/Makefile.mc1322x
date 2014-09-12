@@ -34,6 +34,7 @@ AS       = $(CROSS)as
 AR       = $(CROSS)ar
 NM       = $(CROSS)nm
 OBJCOPY  = $(CROSS)objcopy
+OBJDUMP  = $(CROSS)objdump
 STRIP    = $(CROSS)strip
 
 PROJECT_OBJECTFILES += ${addprefix $(OBJECTDIR)/,$(CONTIKI_TARGET_MAIN:.c=.o)}
@@ -73,34 +74,40 @@ CFLAGS += -I$(OBJECTDIR) -I$(CONTIKI_CPU)/board -DBOARD=$(TARGET)
 CPPFLAGS += -P -C ${addprefix -D,${subst $(COMMA), ,$(DEFINES)}}
 
 
-$(OBJECTDIR)/board.h: $(OBJECTDIR) 
+$(OBJECTDIR)/board.h: $(CONTIKI_CPU)/board/board.h | $(OBJECTDIR)
 ifeq ($(HOST_OS),Windows)
-	ln -f $(CONTIKI_CPU)/board/board.h $(OBJECTDIR)/board.h
+	ln -f $< $@
 else
-	ln -sf ../$(CONTIKI_CPU)/board/board.h $(OBJECTDIR)/board.h
+	ln -sf ../$< $@
 endif
 
-$(OBJECTDIR)/%.lds: $(CONTIKI_CPU)/%.lds.S
-	$(CPP) $(CPPFLAGS) $< > $@
+$(OBJECTDIR)/%.lds: $(CONTIKI_CPU)/%.lds.S | $(OBJECTDIR)
+	$(TRACE_CC)
+	$(Q)$(CPP) $(CPPFLAGS) $< > $@
 
-$(OBJECTDIR)/isr.o: $(CONTIKI_CPU)/src/isr.c
-	$(CC) $(CFLAGS) $(ARM_FLAGS) $< -c -o $@
+$(OBJECTDIR)/isr.o: $(CONTIKI_CPU)/src/isr.c | $(OBJECTDIR)
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) $(ARM_FLAGS) $< -c -o $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(THUMB_FLAGS) $< -c
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) $(THUMB_FLAGS) $< -c
 
-$(OBJECTDIR)/%.o: %.c
-	$(CC) $(CFLAGS) $(THUMB_FLAGS) -c $< -o $@
+$(OBJECTDIR)/%.o: %.c | $(OBJECTDIR)
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) $(THUMB_FLAGS) -c $< -o $@
 
 CUSTOM_RULE_S_TO_OBJECTDIR_O = yes
 
-$(OBJECTDIR)/%.o: %.S
-	$(CC) $(CFLAGS) $(AFLAGS) $(ARM_FLAGS) $< -c  -o $@
+$(OBJECTDIR)/%.o: %.S | $(OBJECTDIR)
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) $(AFLAGS) $(ARM_FLAGS) $< -c  -o $@
 
 CUSTOM_RULE_C_TO_CO=yes
 
 %.co: %.c
-	$(CC) $(CFLAGS) -DAUTOSTART_ENABLE $(THUMB_FLAGS) $< -c -o $@
+	$(TRACE_CC)
+	$(Q)$(CC) $(CFLAGS) -DAUTOSTART_ENABLE $(THUMB_FLAGS) $< -c -o $@
 
 .PRECIOUS: %.bin %_$(TARGET).bin
 
@@ -114,6 +121,9 @@ CUSTOM_RULE_C_TO_CO=yes
 	@
 
 %.elf: $(OBJECTDIR)/board.h  %.co $(PROJECT_OBJECTFILES) contiki-$(TARGET).a $(STARTUP) $(OBJECTDIR)/mc1322x.lds
-	$(CC) $(LDFLAGS) $(CFLAGS) -nostartfiles -o $@ $(filter-out %.a %.lds,$^) $(filter %.a,$^) $(filter %.a,$^)
+	$(TRACE_CC)
+	$(Q)$(CC) $(LDFLAGS) $(CFLAGS) -nostartfiles -o $@ $(filter-out %.a %.lds,$^) $(filter %.a,$^) $(filter %.a,$^)
 
+%.lst: %.elf
+	$(OBJDUMP) -DS $< > $@
 

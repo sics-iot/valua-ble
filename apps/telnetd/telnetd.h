@@ -31,12 +31,14 @@
  *
  *
  */
-#ifndef __TELNETD_H__
-#define __TELNETD_H__
+#ifndef TELNETD_H_
+#define TELNETD_H_
 
 #include "contiki.h"
 
 PROCESS_NAME(telnetd_process);
+
+void telnetd_init(void);
 
 void telnetd_gui_eventhandler(process_event_t ev, process_data_t data);
 void telnetd_appcall(void *data);
@@ -45,4 +47,4 @@ void telnetd_gui_output(const char *str1, int len1, const char *str2, int len2);
 void telnetd_gui_quit(void);
 void telnetd_quit(void);
 
-#endif /* __TELNETD_H__ */
+#endif /* TELNETD_H_ */

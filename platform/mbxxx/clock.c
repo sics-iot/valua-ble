@@ -47,7 +47,7 @@
 #include PLATFORM_HEADER
 #include "hal/error.h"
 #include "hal/hal.h"
-#include "dev/stm32w_systick.h"
+#include "dev/stm32w-systick.h"
 
 #include "sys/clock.h"
 #include "sys/etimer.h"
@@ -57,7 +57,7 @@
 #include "dev/stm32w-radio.h"
 
 #define DEBUG DEBUG_NONE
-#include "net/uip-debug.h"
+#include "net/ip/uip-debug.h"
 
 // The value that will be load in the SysTick value register.
 #define RELOAD_VALUE 24000-1   // 1 ms with a 24 MHz clock
@@ -146,7 +146,7 @@ unsigned long clock_seconds(void)
 
 void sleep_seconds(int seconds)
 {
-  int32u quarter_seconds = seconds * 4;
+  uint32_t quarter_seconds = seconds * 4;
   uint8_t radio_on;
 
 

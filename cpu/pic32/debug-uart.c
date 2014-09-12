@@ -1,13 +1,13 @@
 /*
  * Contiki PIC32 Port project
- * 
+ *
  * Copyright (c) 2012,
  *  Scuola Superiore Sant'Anna (http://www.sssup.it) and
  *  Consorzio Nazionale Interuniversitario per le Telecomunicazioni
  *  (http://www.cnit.it).
  *
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -41,7 +41,7 @@
  */
 
 /**
- * \file   debug-uart.h
+ * \file   cpu/pic32/debug-uart.h
  * \brief  Debug output redirection to uart.
  * \author Giovanni Pellerano <giovanni.pellerano@evilaliv3.org>
  * \date   2012-03-21
@@ -54,7 +54,7 @@
 
 #include <dev/serial-line.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #include <stdio.h>
 #define PRINTF(...) printf(__VA_ARGS__)
@@ -62,7 +62,7 @@
 #define PRINTF(...)
 #endif
 
-#define DEBUG_UART(XX)                                \
+#define DEBUG_UART(XX, YY)                            \
   void                                                \
   _mon_putc(char c)                                   \
   {                                                   \
@@ -77,20 +77,20 @@
     PRINTF("Initializing debug uart: %lubps\n", ubr); \
   }                                                   \
                                                       \
-  UART_INTERRUPT(XX, 2, pic32_uart##XX##_write);
+  UART_INTERRUPT(XX, YY, pic32_uart##XX##_write);
 
 #ifdef __USE_UART_PORT1A_FOR_DEBUG__
-DEBUG_UART(1A);
+DEBUG_UART(1A, 0);
 #elif defined  __USE_UART_PORT1B_FOR_DEBUG__
-DEBUG_UART(1B);
+DEBUG_UART(1B, 2);
 #elif defined  __USE_UART_PORT2A_FOR_DEBUG__
-DEBUG_UART(2A);
+DEBUG_UART(2A, 1);
 #elif defined  __USE_UART_PORT2B_FOR_DEBUG__
-DEBUG_UART(2B);
+DEBUG_UART(2B, 2);
 #elif defined  __USE_UART_PORT3A_FOR_DEBUG__
-DEBUG_UART(3A);
+DEBUG_UART(3A, 1);
 #elif defined  __USE_UART_PORT3B_FOR_DEBUG__
-DEBUG_UART(3B);
+DEBUG_UART(3B, 2);
 #else
 DEBUG_UART(1A);
 #endif

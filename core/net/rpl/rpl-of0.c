@@ -42,9 +42,7 @@
 #include "net/rpl/rpl-private.h"
 
 #define DEBUG DEBUG_NONE
-#include "net/uip-debug.h"
-
-#include "net/neighbor-info.h"
+#include "net/ip/uip-debug.h"
 
 static void reset(rpl_dag_t *);
 static rpl_parent_t *best_parent(rpl_parent_t *, rpl_parent_t *);
@@ -64,7 +62,7 @@ rpl_of_t rpl_of0 = {
 
 #define DEFAULT_RANK_INCREMENT  RPL_MIN_HOPRANKINC
 
-#define MIN_DIFFERENCE (NEIGHBOR_INFO_ETX_DIVISOR + NEIGHBOR_INFO_ETX_DIVISOR / 2)
+#define MIN_DIFFERENCE (RPL_MIN_HOPRANKINC + RPL_MIN_HOPRANKINC / 2)
 
 static void
 reset(rpl_dag_t *dag)
@@ -127,19 +125,19 @@ best_parent(rpl_parent_t *p1, rpl_parent_t *p2)
 {
   rpl_rank_t r1, r2;
   rpl_dag_t *dag;
-  
+
   PRINTF("RPL: Comparing parent ");
-  PRINT6ADDR(&p1->addr);
+  PRINT6ADDR(rpl_get_parent_ipaddr(p1));
   PRINTF(" (confidence %d, rank %d) with parent ",
         p1->link_metric, p1->rank);
-  PRINT6ADDR(&p2->addr);
+  PRINT6ADDR(rpl_get_parent_ipaddr(p2));
   PRINTF(" (confidence %d, rank %d)\n",
         p2->link_metric, p2->rank);
 
 
-  r1 = DAG_RANK(p1->rank, p1->dag->instance) * NEIGHBOR_INFO_ETX_DIVISOR +
+  r1 = DAG_RANK(p1->rank, p1->dag->instance) * RPL_MIN_HOPRANKINC  +
          p1->link_metric;
-  r2 = DAG_RANK(p2->rank, p1->dag->instance) * NEIGHBOR_INFO_ETX_DIVISOR +
+  r2 = DAG_RANK(p2->rank, p1->dag->instance) * RPL_MIN_HOPRANKINC  +
          p2->link_metric;
   /* Compare two parents by looking both and their rank and at the ETX
      for that parent. We choose the parent that has the most
@@ -161,3 +159,5 @@ update_metric_container(rpl_instance_t *instance)
 {
   instance->mc.type = RPL_DAG_MC_NONE;
 }
+
+/** @}*/

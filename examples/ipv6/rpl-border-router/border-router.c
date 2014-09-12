@@ -38,8 +38,8 @@
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"
-#include "net/uip.h"
-#include "net/uip-ds6.h"
+#include "net/ip/uip.h"
+#include "net/ipv6/uip-ds6.h"
 #include "net/rpl/rpl.h"
 
 #include "net/netstack.h"
@@ -52,11 +52,7 @@
 #include <ctype.h>
 
 #define DEBUG DEBUG_NONE
-#include "net/uip-debug.h"
-
-uint16_t dag_id[] = {0x1111, 0x1100, 0, 0, 0, 0, 0, 0x0011};
-
-extern uip_ds6_nbr_t uip_ds6_nbr_cache[];
+#include "net/ip/uip-debug.h"
 
 static uip_ipaddr_t prefix;
 static uint8_t prefix_set;
@@ -149,6 +145,7 @@ PT_THREAD(generate_routes(struct httpd_state *s))
 {
   static int i;
   static uip_ds6_route_t *r;
+  static uip_ds6_nbr_t *nbr;
 #if BUF_USES_STACK
   char buf[256];
 #endif
@@ -166,15 +163,17 @@ PT_THREAD(generate_routes(struct httpd_state *s))
   blen = 0;
 #endif
   ADD("Neighbors<pre>");
-  for(i = 0; i < UIP_DS6_NBR_NB; i++) {
-    if(uip_ds6_nbr_cache[i].isused) {
+
+  for(nbr = nbr_table_head(ds6_neighbors);
+      nbr != NULL;
+      nbr = nbr_table_next(ds6_neighbors, nbr)) {
 
 #if WEBSERVER_CONF_NEIGHBOR_STATUS
 #if BUF_USES_STACK
 {char* j=bufptr+25;
-      ipaddr_add(&uip_ds6_nbr_cache[i].ipaddr);
+      ipaddr_add(&nbr->ipaddr);
       while (bufptr < j) ADD(" ");
-      switch (uip_ds6_nbr_cache[i].state) {
+      switch (nbr->state) {
       case NBR_INCOMPLETE: ADD(" INCOMPLETE");break;
       case NBR_REACHABLE: ADD(" REACHABLE");break;
       case NBR_STALE: ADD(" STALE");break;      
@@ -184,9 +183,9 @@ PT_THREAD(generate_routes(struct httpd_state *s))
 }
 #else
 {uint8_t j=blen+25;
-      ipaddr_add(&uip_ds6_nbr_cache[i].ipaddr);
+      ipaddr_add(&nbr->ipaddr);
       while (blen < j) ADD(" ");
-      switch (uip_ds6_nbr_cache[i].state) {
+      switch (nbr->state) {
       case NBR_INCOMPLETE: ADD(" INCOMPLETE");break;
       case NBR_REACHABLE: ADD(" REACHABLE");break;
       case NBR_STALE: ADD(" STALE");break;      
@@ -196,7 +195,7 @@ PT_THREAD(generate_routes(struct httpd_state *s))
 }
 #endif
 #else
-      ipaddr_add(&uip_ds6_nbr_cache[i].ipaddr);
+      ipaddr_add(&nbr->ipaddr);
 #endif
 
       ADD("\n");
@@ -211,7 +210,6 @@ PT_THREAD(generate_routes(struct httpd_state *s))
         blen = 0;
       }
 #endif
-    }
   }
   ADD("</pre>Routes<pre>");
   SEND_STRING(&s->sout, buf);
@@ -221,7 +219,7 @@ PT_THREAD(generate_routes(struct httpd_state *s))
   blen = 0;
 #endif
 
-  for(r = uip_ds6_route_list_head(); r != NULL; r = list_item_next(r)) {
+  for(r = uip_ds6_route_head(); r != NULL; r = uip_ds6_route_next(r)) {
 
 #if BUF_USES_STACK
 #if WEBSERVER_CONF_ROUTE_LINKS
@@ -247,7 +245,7 @@ PT_THREAD(generate_routes(struct httpd_state *s))
 #endif
 #endif
     ADD("/%u (via ", r->length);
-    ipaddr_add(&r->nexthop);
+    ipaddr_add(uip_ds6_route_nexthop(r));
     if(1 || (r->state.lifetime < 600)) {
       ADD(") %lus\n", r->state.lifetime);
     } else {
@@ -320,18 +318,24 @@ request_prefix(void)
 void
 set_prefix_64(uip_ipaddr_t *prefix_64)
 {
+  rpl_dag_t *dag;
   uip_ipaddr_t ipaddr;
   memcpy(&prefix, prefix_64, 16);
   memcpy(&ipaddr, prefix_64, 16);
   prefix_set = 1;
   uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
   uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
+
+  dag = rpl_set_root(RPL_DEFAULT_INSTANCE, &ipaddr);
+  if(dag != NULL) {
+    rpl_set_prefix(dag, &prefix, 64);
+    PRINTF("created a new RPL dag\n");
+  }
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(border_router_process, ev, data)
 {
   static struct etimer et;
-  rpl_dag_t *dag;
 
   PROCESS_BEGIN();
 
@@ -361,12 +365,6 @@ PROCESS_THREAD(border_router_process, ev, data)
     etimer_set(&et, CLOCK_SECOND);
     request_prefix();
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-  }
-
-  dag = rpl_set_root(RPL_DEFAULT_INSTANCE,(uip_ip6addr_t *)dag_id);
-  if(dag != NULL) {
-    rpl_set_prefix(dag, &prefix, 64);
-    PRINTF("created a new RPL dag\n");
   }
 
   /* Now turn the radio on, but disable radio duty cycling.

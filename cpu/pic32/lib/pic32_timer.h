@@ -55,8 +55,8 @@
  * the 3xx and 4xx families of the pic32mx.
  */
 
-#ifndef __INCLUDE_PIC32_TIMER_H__
-#define __INCLUDE_PIC32_TIMER_H__
+#ifndef INCLUDE_PIC32_TIMER_H_
+#define INCLUDE_PIC32_TIMER_H_
 
 #ifdef __USE_TIMER__
 
@@ -99,13 +99,13 @@
   void pic32_timer##XY##_stop(void);                 \
   uint32_t pic32_timer##XY##_get_val(void);
 
-#define TIMER_INTERRUPT(XX, CALLBACK)   \
-  TIMER_ISR(_TIMER_##XX##_VECTOR)       \
-  {                                     \
-    ENERGEST_ON(ENERGEST_TYPE_IRQ);     \
-    CALLBACK();                         \
-    ENERGEST_OFF(ENERGEST_TYPE_IRQ);    \
-    IFS0CLR = _IFS0_T##XX##IF_MASK;     \
+#define TIMER_INTERRUPT(XX, CALLBACK)                \
+  TIMER_ISR(_TIMER_##XX##_VECTOR)                    \
+  {                                                  \
+    ENERGEST_ON(ENERGEST_TYPE_IRQ);                  \
+    CALLBACK();                                      \
+    ENERGEST_OFF(ENERGEST_TYPE_IRQ);                 \
+    IFS0CLR = _IFS0_T##XX##IF_MASK;                  \
   }
 
 #ifdef __USE_TIMER_1__
@@ -138,6 +138,6 @@ TIMERN_32_DEF(45)
 
 #endif /* __USE_TIMER__ */
 
-#endif /* __INCLUDE_PIC32_TIMER_H__ */
+#endif /* INCLUDE_PIC32_TIMER_H_ */
 
 /** @} */

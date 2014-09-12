@@ -1,13 +1,13 @@
 /*
  * Contiki PIC32 Port project
- * 
+ *
  * Copyright (c) 2012,
  *  Scuola Superiore Sant'Anna (http://www.sssup.it) and
  *  Consorzio Nazionale Interuniversitario per le Telecomunicazioni
  *  (http://www.cnit.it).
  *
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -41,7 +41,7 @@
  */
 
 /**
- * \file   clock.c
+ * \file   cpu/pic32/clock.c
  * \brief  Clock routines.
  * \author Giovanni Pellerano <giovanni.pellerano@evilaliv3.org>
  * \author Daniele Alessandrelli <d.alessandrelli@sssup.it>
@@ -67,7 +67,7 @@ clock_callback(void)
   ++ticks;
 
   if(etimer_pending()) {
- 	  etimer_request_poll();
+    etimer_request_poll();
   }
 
 #if (CLOCK_CONF_SECOND & (CLOCK_CONF_SECOND - 1)) != 0
@@ -98,15 +98,29 @@ clock_set_seconds(unsigned long sec)
   seconds = sec;
 }
 /*---------------------------------------------------------------------------*/
-void
-clock_init(void)
-{
-  ticks = 0;
-  seconds = 0;
-  pic32_timer1_init(CLOCK_SECOND);
-  pic32_timer1_enable_irq();
-  pic32_timer1_start();
+#define CLOCK_INIT(XX)                 \
+void                                   \
+clock_init(void)                       \
+{                                      \
+  ticks = 0;                           \
+  seconds = 0;                         \
+  pic32_timer##XX##_init(CLOCK_SECOND);\
+  pic32_timer##XX##_enable_irq();      \
+  pic32_timer##XX##_start();           \
 }
+
+#if PIC32_TIMER_CLOCK == 1
+CLOCK_INIT(1)
+#elif PIC32_TIMER_CLOCK == 2
+CLOCK_INIT(2)
+#elif PIC32_TIMER_CLOCK == 3
+CLOCK_INIT(3)
+#elif PIC32_TIMER_CLOCK == 4
+CLOCK_INIT(4)
+#elif PIC32_TIMER_CLOCK == 5
+CLOCK_INIT(5)
+#endif
+
 /*---------------------------------------------------------------------------*/
 void
 clock_delay_usec(uint16_t dt)
@@ -115,7 +129,7 @@ clock_delay_usec(uint16_t dt)
   uint32_t stop;
 
   asm volatile("mfc0   %0, $9" : "=r"(now));
-  
+
   /* The Count register is incremented every two system clock (SYSCLK) cycles. */
 
   stop = now + dt * ((pic32_clock_get_system_clock() / 1000000) / 2);
@@ -139,6 +153,16 @@ clock_delay(unsigned int delay)
 }
 /*---------------------------------------------------------------------------*/
 
+#if PIC32_TIMER_CLOCK == 1
 TIMER_INTERRUPT(1, clock_callback);
+#elif PIC32_TIMER_CLOCK == 2
+TIMER_INTERRUPT(2, clock_callback);
+#elif PIC32_TIMER_CLOCK == 3
+TIMER_INTERRUPT(3, clock_callback);
+#elif PIC32_TIMER_CLOCK == 4
+TIMER_INTERRUPT(4, clock_callback);
+#elif PIC32_TIMER_CLOCK == 5
+TIMER_INTERRUPT(5, clock_callback);
+#endif
 
 /** @} */

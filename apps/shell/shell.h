@@ -57,8 +57,8 @@
  *         Adam Dunkels <adam@sics.se>
  */
 
-#ifndef __SHELL_H__
-#define __SHELL_H__
+#ifndef SHELL_H_
+#define SHELL_H_
 
 #include "sys/process.h"
 
@@ -374,7 +374,6 @@ struct shell_input {
 
 #include "shell-base64.h"
 #include "shell-blink.h"
-#include "shell-checkpoint.h"
 #include "shell-collect-view.h"
 #include "shell-coffee.h"
 #include "shell-download.h"
@@ -403,17 +402,15 @@ struct shell_input {
 #include "shell-rsh.h"
 #include "shell-run.h"
 #include "shell-sendtest.h"
-#include "shell-sensortweet.h"
 #include "shell-sky.h"
 #include "shell-tcpsend.h"
 #include "shell-text.h"
 #include "shell-time.h"
-#include "shell-tweet.h"
 #include "shell-udpsend.h"
 #include "shell-vars.h"
 #include "shell-wget.h"
 
-#endif /* __SHELL_H__ */
+#endif /* SHELL_H_ */
 
 
 /** @} */

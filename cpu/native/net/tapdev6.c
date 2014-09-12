@@ -33,6 +33,10 @@
  *
  */
 
+#include "net/ip/uip.h"
+#include "net/ip/uipopt.h"
+
+#if UIP_CONF_IPV6
 
 #include <fcntl.h>
 #include <stdlib.h>
@@ -94,7 +98,7 @@ static unsigned long lasttime;
 #endif
 
 static void do_send(void);
-uint8_t tapdev_send(uip_lladdr_t *lladdr);
+uint8_t tapdev_send(const uip_lladdr_t *lladdr);
 
 /*---------------------------------------------------------------------------*/
 int
@@ -367,7 +371,8 @@ do_send(void)
   }
 }
 /*---------------------------------------------------------------------------*/
-uint8_t tapdev_send(uip_lladdr_t *lladdr)
+uint8_t
+tapdev_send(const uip_lladdr_t *lladdr)
 {
   /*
    * If L3 dest is multicast, build L2 multicast address
@@ -413,3 +418,5 @@ tapdev_exit(void)
   close(fd);
 }
 /*---------------------------------------------------------------------------*/
+
+#endif /* UIP_CONF_IPV6 */
