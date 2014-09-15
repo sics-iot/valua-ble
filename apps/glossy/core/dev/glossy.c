@@ -38,6 +38,8 @@
  */
 
 #include "glossy.h"
+#include "dev/cc2420/cc2420.h"
+#include "string.h" // memcpy()
 
 #define CM_POS              CM_1
 #define CM_NEG              CM_2
@@ -66,17 +68,17 @@ static uint8_t relay_cnt, t_ref_l_updated;
 
 /* --------------------------- Radio functions ---------------------- */
 static inline void radio_flush_tx(void) {
-	FASTSPI_STROBE(CC2420_SFLUSHTX);
+	CC2420_STROBE(CC2420_SFLUSHTX);
 }
 
 static inline uint8_t radio_status(void) {
 	uint8_t status;
-	FASTSPI_UPD_STATUS(status);
+	CC2420_GET_STATUS(status);
 	return status;
 }
 
 static inline void radio_on(void) {
-	FASTSPI_STROBE(CC2420_SRXON);
+	CC2420_STROBE(CC2420_SRXON);
 	while(!(radio_status() & (BV(CC2420_XOSC16M_STABLE))));
 	ENERGEST_ON(ENERGEST_TYPE_LISTEN);
 }
@@ -90,14 +92,14 @@ static inline void radio_off(void) {
 		ENERGEST_OFF(ENERGEST_TYPE_LISTEN);
 	}
 #endif /* ENERGEST_CONF_ON */
-	FASTSPI_STROBE(CC2420_SRFOFF);
+	CC2420_STROBE(CC2420_SRFOFF);
 }
 
 static inline void radio_flush_rx(void) {
 	uint8_t dummy;
-	FASTSPI_READ_FIFO_BYTE(dummy);
-	FASTSPI_STROBE(CC2420_SFLUSHRX);
-	FASTSPI_STROBE(CC2420_SFLUSHRX);
+	CC2420_READ_FIFO_BYTE(dummy);
+	CC2420_STROBE(CC2420_SFLUSHRX);
+	CC2420_STROBE(CC2420_SFLUSHRX);
 }
 
 static inline void radio_abort_rx(void) {
@@ -106,7 +108,7 @@ static inline void radio_abort_rx(void) {
 }
 
 static inline void radio_abort_tx(void) {
-	FASTSPI_STROBE(CC2420_SRXON);
+	CC2420_STROBE(CC2420_SRXON);
 #if ENERGEST_CONF_ON
 	if (energest_current_mode[ENERGEST_TYPE_TRANSMIT]) {
 		ENERGEST_OFF(ENERGEST_TYPE_TRANSMIT);
@@ -117,7 +119,7 @@ static inline void radio_abort_tx(void) {
 }
 
 static inline void radio_start_tx(void) {
-	FASTSPI_STROBE(CC2420_STXON);
+	CC2420_STROBE(CC2420_STXON);
 #if ENERGEST_CONF_ON
 	ENERGEST_OFF(ENERGEST_TYPE_LISTEN);
 	ENERGEST_ON(ENERGEST_TYPE_TRANSMIT);
@@ -125,7 +127,7 @@ static inline void radio_start_tx(void) {
 }
 
 static inline void radio_write_tx(void) {
-	FASTSPI_WRITE_FIFO(packet, packet_len_tmp - 1);
+	CC2420_WRITE_FIFO_BUF(packet, packet_len_tmp - 1);
 }
 
 /* --------------------------- SFD interrupt ------------------------ */
@@ -139,7 +141,7 @@ timerb1_interrupt(void)
 	// compute the variable part of the delay with which the interrupt has been served
 	T_irq = ((RTIMER_NOW_DCO() - TBCCR1) - 21) << 1;
 
-	if (state == GLOSSY_STATE_RECEIVING && !SFD_IS_1) {
+	if (state == GLOSSY_STATE_RECEIVING && !CC2420_SFD_IS_1) {
 		// packet reception has finished
 		// T_irq in [0,...,8]
 		if (T_irq <= 8) {
@@ -175,15 +177,15 @@ timerb1_interrupt(void)
 	} else {
 		// read TBIV to clear IFG
 		tbiv = TBIV;
-		if (state == GLOSSY_STATE_WAITING && SFD_IS_1) {
+		if (state == GLOSSY_STATE_WAITING && CC2420_SFD_IS_1) {
 			// packet reception has started
 			glossy_begin_rx();
 		} else {
-			if (state == GLOSSY_STATE_RECEIVED && SFD_IS_1) {
+			if (state == GLOSSY_STATE_RECEIVED && CC2420_SFD_IS_1) {
 				// packet transmission has started
 				glossy_begin_tx();
 			} else {
-				if (state == GLOSSY_STATE_TRANSMITTING && !SFD_IS_1) {
+				if (state == GLOSSY_STATE_TRANSMITTING && !CC2420_SFD_IS_1) {
 					// packet transmission has finished
 					glossy_end_tx();
 				} else {
@@ -288,8 +290,8 @@ static inline void glossy_disable_other_interrupts(void) {
 	// disable etimer interrupts
 	TACCTL1 &= ~CCIE;
 	TBCCTL0 = 0;
-	DISABLE_FIFOP_INT();
-	CLEAR_FIFOP_INT();
+	CC2420_DISABLE_FIFOP_INT();
+	CC2420_CLEAR_FIFOP_INT();
 	SFD_CAP_INIT(CM_BOTH);
 	ENABLE_SFD_INT();
 	// stop Timer B
@@ -317,8 +319,8 @@ static inline void glossy_enable_other_interrupts(void) {
 #endif
 	DISABLE_SFD_INT();
 	CLEAR_SFD_INT();
-	FIFOP_INT_INIT();
-	ENABLE_FIFOP_INT();
+	CC2420_FIFOP_INT_INIT();
+	CC2420_ENABLE_FIFOP_INT();
 	// stop Timer B
 	TBCTL = 0;
 	// Timer B sourced by the 32 kHz
@@ -522,7 +524,7 @@ inline void glossy_begin_rx(void) {
 	}
 
 	// wait until the FIFO pin is 1 (i.e., until the first byte is received)
-	while (!FIFO_IS_1) {
+	while (!CC2420_FIFO_IS_1) {
 		if (packet_len && !RTIMER_CLOCK_LT(RTIMER_NOW_DCO(), t_rx_timeout)) {
 			radio_abort_rx();
 #if GLOSSY_DEBUG
@@ -532,7 +534,7 @@ inline void glossy_begin_rx(void) {
 		}
 	};
 	// read the first byte (i.e., the len field) from the RXFIFO
-	FASTSPI_READ_FIFO_BYTE(GLOSSY_LEN_FIELD);
+	CC2420_READ_FIFO_BYTE(GLOSSY_LEN_FIELD);
 	// keep receiving only if it has the right length
 	if ((packet_len && (GLOSSY_LEN_FIELD != packet_len_tmp))
 			|| (GLOSSY_LEN_FIELD < FOOTER_LEN) || (GLOSSY_LEN_FIELD > 127)) {
@@ -551,7 +553,7 @@ inline void glossy_begin_rx(void) {
 
 #if !COOJA
 	// wait until the FIFO pin is 1 (i.e., until the second byte is received)
-	while (!FIFO_IS_1) {
+	while (!CC2420_FIFO_IS_1) {
 		if (!RTIMER_CLOCK_LT(RTIMER_NOW_DCO(), t_rx_timeout)) {
 			radio_abort_rx();
 #if GLOSSY_DEBUG
@@ -561,7 +563,7 @@ inline void glossy_begin_rx(void) {
 		}
 	};
 	// read the second byte (i.e., the header field) from the RXFIFO
-	FASTSPI_READ_FIFO_BYTE(GLOSSY_HEADER_FIELD);
+	CC2420_READ_FIFO_BYTE(GLOSSY_HEADER_FIELD);
 	// keep receiving only if it has the right header
 	if ((GLOSSY_HEADER_FIELD & GLOSSY_HEADER_MASK) != GLOSSY_HEADER) {
 		// packet with a wrong header: abort packet reception
@@ -576,7 +578,7 @@ inline void glossy_begin_rx(void) {
 		// if packet is longer than 8 bytes, read all bytes but the last 8
 		while (bytes_read <= packet_len_tmp - 8) {
 			// wait until the FIFO pin is 1 (until one more byte is received)
-			while (!FIFO_IS_1) {
+			while (!CC2420_FIFO_IS_1) {
 				if (!RTIMER_CLOCK_LT(RTIMER_NOW_DCO(), t_rx_timeout)) {
 					radio_abort_rx();
 #if GLOSSY_DEBUG
@@ -586,7 +588,7 @@ inline void glossy_begin_rx(void) {
 				}
 			};
 			// read another byte from the RXFIFO
-			FASTSPI_READ_FIFO_BYTE(packet[bytes_read]);
+			CC2420_READ_FIFO_BYTE(packet[bytes_read]);
 			bytes_read++;
 		}
 	}
@@ -597,7 +599,7 @@ inline void glossy_begin_rx(void) {
 inline void glossy_end_rx(void) {
 	rtimer_clock_t t_rx_stop_tmp = TBCCR1;
 	// read the remaining bytes from the RXFIFO
-	FASTSPI_READ_FIFO_NO_WAIT(&packet[bytes_read], packet_len_tmp - bytes_read + 1);
+	CC2420_READ_FIFO_BUF(&packet[bytes_read], packet_len_tmp - bytes_read + 1);
 	bytes_read = packet_len_tmp + 1;
 #if COOJA
 	if ((GLOSSY_CRC_FIELD & FOOTER1_CRC_OK) && ((GLOSSY_HEADER_FIELD & GLOSSY_HEADER_MASK) == GLOSSY_HEADER)) {

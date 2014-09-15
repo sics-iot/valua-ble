@@ -42,7 +42,7 @@
 
 #include "contiki.h"
 #include "dev/watchdog.h"
-#include "dev/cc2420_const.h"
+#include "dev/cc2420/cc2420_const.h"
 #include "dev/leds.h"
 #include "dev/spi.h"
 #include <stdio.h>
@@ -314,7 +314,7 @@ inline void glossy_end_tx(void);
  *
  */
 #define SFD_CAP_INIT(edge) do {\
-	P4SEL |= BV(SFD);\
+	P4SEL |= BV(CC2420_SFD_PIN);\
 	TBCCTL1 = edge | CAP | SCS;\
 } while (0)
 

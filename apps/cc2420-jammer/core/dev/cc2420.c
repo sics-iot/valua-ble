@@ -645,6 +645,7 @@ cc2420_set_channel(int c)
   RELEASE_LOCK();
   return 1;
 }
+
 /*---------------------------------------------------------------------------*/
 int
 cc2420_set_frequency(uint16_t f)

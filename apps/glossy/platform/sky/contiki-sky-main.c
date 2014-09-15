@@ -35,7 +35,7 @@
 
 #include "contiki.h"
 
-#include "dev/cc2420.h"
+#include "dev/cc2420/cc2420.h"
 #include "dev/leds.h"
 #include "dev/uart1.h"
 #include "dev/watchdog.h"
@@ -104,7 +104,7 @@ main(int argc, char **argv)
   process_start(&etimer_process, NULL);
 
   cc2420_init();
-  cc2420_set_channel(RF_CHANNEL);
+  cc2420_set_channel(CC2420_CONF_CHANNEL);
 
   printf(CONTIKI_VERSION_STRING " started. ");
   if(node_id > 0) {
