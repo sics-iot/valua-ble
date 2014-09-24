@@ -50,8 +50,6 @@ struct variable
 	unsigned ceiling;
 };
 
-extern const struct variable user_variable_list[];
-
 #define OP(n, op)\
 				switch(op) {\
  				case '+':	n += 1;	break;\
@@ -64,5 +62,6 @@ extern const struct variable user_variable_list[];
  				case '\'': n -= 10;	break;\
 				default:;\
 				}
-
 #endif
+
+void commands_set_user_vars(const struct variable *vars);

@@ -139,7 +139,7 @@ struct variable const user_variable_list[] = {
 	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
 	/* {'m', (union number*)&mode, sizeof(mode), "mode", 0, LAST_MODE}, */
-	{'0', NULL, 0, NULL, -1, -1},
+	{'\0', NULL, 0, NULL, -1, -1},
 };
 
 PROCESS(test_process, "CC2420 jammer");
@@ -605,6 +605,9 @@ PROCESS_THREAD(test_process, ev, data)
 
 	// debug prints
 	printf("F_CPU %lu CLOCK_CONF_SECOND %lu RTIMER_CONF_SECOND %u\n", F_CPU, CLOCK_CONF_SECOND, RTIMER_SECOND);
+
+	// hook user variables to command system
+	commands_set_user_vars(user_variable_list);
 
 	/* pre-fill pseudo random data for TXFIFO */
 	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);

@@ -14,6 +14,8 @@ long unsigned sum_lqi;
 int min_rssi = 15, max_rssi = -55;
 unsigned min_lqi = 108, max_lqi = 0;
 
+static const struct variable *user_vars;
+
 extern int jam_ena;
 extern const unsigned char tx_power_level[10];
 extern int cc2420_packets_seen, cc2420_packets_read;
@@ -343,7 +345,9 @@ commands_set_callback(void (*f)(int))
 void
 var_update(char op, char var)
 {
-	const struct variable *vp = &user_variable_list[0];
+	if(!user_vars) return;
+
+	const struct variable *vp = user_vars;
 	uint8_t *u8;
 	uint16_t *u16;
 	uint32_t *u32;
@@ -463,3 +467,18 @@ field_update(char c, char op)
 	}
 }
 
+/* Initialize pointer to user variables */
+void
+commands_set_user_vars(const struct variable *vars)
+{
+	if(!user_vars) printf("User variables initialized\n");
+	else printf("User variables updated\n");
+	user_vars = vars;
+
+	// debug info: variables command, name and width
+	const struct variable *vp;
+	printf("Cmd Variable      Width\n");
+	for(vp=user_vars;vp->ch != '\0';vp++) {
+		printf("%c   %s      %d\n", vp->ch, vp->long_name, vp->width);
+	}
+}
