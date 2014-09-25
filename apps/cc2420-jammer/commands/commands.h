@@ -27,12 +27,6 @@ void commands_set_callback(void (*f)(int));
 void var_update(char op, char var);
 void field_update(char c, char op);
 
-struct command
-{
-	char ch;
-	void (*f)(void);
-};
-
 // User-adjustable variable (non-negative integer type)
 union number {
 		uint8_t u8;
@@ -42,7 +36,7 @@ union number {
 
 struct variable
 {
-	char ch; // single char denoting variable
+	const char ch; // single char denoting variable
 	union number *n;
 	int width;
 	const char *long_name; // long descriptive name

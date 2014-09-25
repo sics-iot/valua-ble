@@ -24,6 +24,79 @@ static void (*callback)(int v);
 
 /* TODO: add a "help" command */
 /* TODO: a battery voltage reading command: scan through 32 BATTMON_VOLTAGE levels to find level at which the BATTMON_OK toggles, the convert to volt based formular in datasheet */
+
+struct field
+{
+	char ch;
+	const char *name;
+	enum cc2420_register addr;
+	unsigned msb;
+	unsigned lsb;
+};
+
+/*---------------------------------------------------------------------------*/
+struct command
+{
+	const char ch;
+	const char *name;
+	void (*f)(void);
+};
+
+static void help(void);
+
+/*---------------------------------------------------------------------------*/
+const static struct field field_list[] = {
+	{'c', "CCAMUX", CC2420_IOCFG1, 4, 0},
+	{'s', "SFDMUX", CC2420_IOCFG1, 9, 5},
+	/* the TX DACs data source is selected by DAC_SRC according to: */
+	/* 0: Normal operation (from modulator). */
+	/* 1: The DAC_I_O and DAC_Q_O override values below.- */
+	/* 2: From ADC, most significant bits */
+	/* 3: I/Q after digital down mixing and channel filtering. */
+	/* 4: Full-spectrum White Noise (from CRC) */
+	/* 5: From ADC, least significant bits */
+	/* 6: RSSI / Cordic Magnitude Output */
+	/* 7: HSSD module. */
+	{'d', "DAC_SRC", CC2420_DACTST, 14, 12},
+	/* DAC override values, 5-bit */
+	{'i', "DAC_I_O", CC2420_DACTST, 11, 5},
+	{'q', "DAC_I_Q", CC2420_DACTST, 4, 0},
+	/* LNA and mixer gain: 0=automatic, 1,2,3=low,mid,high */
+	{'g', "LNAMIX_GAINMODE_O", CC2420_AGCCTRL, 3, 2},
+	/* VGA gain override: 0=automatic, 1=manual  */
+	{'V', "VGA_GAIN_OE", CC2420_AGCCTRL, 11, 11},
+	/* VGA gain: 0-127, non-linear, non-monotonic relationship btw. value and gain  */
+	/* read <= current gain, write => manual gain */
+	{'v', "VGA_GAIN", CC2420_AGCCTRL, 10, 4},
+	/* Modulation mode: 0=normal, 1=reverse phase */
+	{'P', "MOD_MODE", CC2420_MDMCTRL1, 4, 4},
+	/* Preamble length in bytes: 0-15=1-16 */
+	{'E', "PREAMBLE_LENGTH", CC2420_MDMCTRL0, 3, 0},
+	/* Carrier frequency in 1 MHz steps: 0-1023=2048-3071 MHz, 357=2405 MHz */
+	{'f', "FREQ", CC2420_FSCTRL, 9, 0},
+	/* Output PA level: 3=-25dB, 7=-15dB, 11=-10dB 15=-7dB 19=-5dB 23=-3dB 27=-1dB 31=0dB */
+	{'p', "PA_LEVEL", CC2420_TXCTRL, 4, 0},
+	/* 16-bit Syncword: 0xA70F="00" preamble, 0xA7FF="0" preamble, 0xA700="000" preamble */
+	{'S', "SYNCWORD", CC2420_SYNCWORD, 15, 0},
+	/* The time after the last chip in the packet is sent, and the TXRX switch is disabled. In μs. */
+	{'t', "TC_TXEND2SWITCH[2:0]", CC2420_FSMTC, 5, 3},
+	/* The time after the last chip in the packet is sent, and the PA is set in power-down. Also the time at which the modulator is disabled. In μs. */
+	{'T', "TC_TXEND2PAOFF[2:0]", CC2420_FSMTC, 2, 0},
+	{'A', "ATESTMOD_PD", CC2420_TOPTST, 4, 4},
+	/* ATEST mode: 0-7, we skip mode 8 */
+	{'a', "ATESTMOD_MODE[2:0]", CC2420_TOPTST, 2, 0},
+	{'K', "ADR_DECODE", CC2420_MDMCTRL0, 11, 11},
+	{'k', "AUTOACK", CC2420_MDMCTRL0, 4, 4},
+	{'B', "BATTMON_EN", CC2420_BATTMON, 5, 5},
+	{'b', "BATTMON_VOLTAGE", CC2420_BATTMON, 4, 0},
+	{'O', "BATTMON_OK", CC2420_BATTMON, 6, 6}, // read-only
+	{'F', "FIFO_THR", CC2420_IOCFG0, 6, 0},
+	{'I', "ADC_I", CC2420_ADCTST, 14, 8},
+	{'Q', "ADC_Q", CC2420_ADCTST, 6, 0},
+	{'e', "RESETn", CC2420_MAIN, 15, 15}, // wrtie '0' to reset radio
+	{'R', "RESERVED", CC2420_RESERVED, 15, 0},
+};
+
 // Individual command handlers
 static void
 reboot(void)
@@ -232,12 +305,6 @@ show_all_registers(void)
 }
 
 static void
-help(void)
-{
- /* TODO: */
-}
-
-static void
 status(void)
 {
   uint8_t status;
@@ -245,26 +312,41 @@ status(void)
 	printf("0x%01X\n", status);
 }
 
-/*---------------------------------------------------------------------------*/
 static const struct command command_table[] =	{
-	{'h', help},
-	{'e', reboot},
-	{'u', power_up},
-	{'d', power_down},
-	{'r', rssi},
-	{'+', channel_up},
-	{'-', channel_down},
-	{'v', view_rx_statistics},
-	{'V', view_failed_rx_statistics},
-	{'w', view_tx_power_level},
-	{'H', debug_hssd},
-	{'A', debug_analog},
-	{'S', reverse_syncword},
-	{'M', mac_update},
-	{'L', show_all_registers},
-	{'s', status}
+	{'h', "Help", help},
+	{'e', "Reboot", reboot},
+	{'w', "TX power level", view_tx_power_level},
+	{'u', "TX power+", power_up},
+	{'d', "TX power-", power_down},
+	{'r', "RSSI", rssi},
+	{'+', "Channel+", channel_up},
+	{'-', "Channel-", channel_down},
+	{'v', "Successful pkt receptions", view_rx_statistics},
+	{'V', "Unsuccessful pkt receptions", view_failed_rx_statistics},
+	{'H', "Enter HSSD mode", debug_hssd},
+	{'A', "Enaable analog test mode", debug_analog},
+	{'S', "Reverse sync word", reverse_syncword},
+	{'M', "MAC address update", mac_update},
+	{'L', "Show all registers", show_all_registers},
+	{'s', "CC2420 status byte", status}
 };
 
+/* Print commands */
+static void
+help(void)
+{
+	const struct command *cmd;
+	const struct field *fp;
+	printf("Single character commands:\n");
+	for(cmd=command_table; cmd < command_table + sizeof(command_table)/sizeof(struct command); cmd++)
+		printf("%c %s\n", cmd->ch, cmd->name);
+
+	printf("---------\n");
+	printf("CC2420 field update commands <cmd name width(bits)>:\n");
+	for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field); fp++)
+		printf("%c %s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
+}
+/*-----------------------------------------------------------------------------*/
 static void
 exec_command(char c)
 {
@@ -382,67 +464,6 @@ var_update(char op, char var)
 
 /*-----------------------------------------------------------------------------*/ 
 // Generic CC2420 field update operations
-struct field
-{
-	char cmd;
-	const char *name;
-	enum cc2420_register addr;
-	unsigned msb;
-	unsigned lsb;
-};
-
-const static struct field field_list[] = {
-	{'c', "CCAMUX", CC2420_IOCFG1, 4, 0},
-	{'s', "SFDMUX", CC2420_IOCFG1, 9, 5},
-	/* the TX DACs data source is selected by DAC_SRC according to: */
-	/* 0: Normal operation (from modulator). */
-	/* 1: The DAC_I_O and DAC_Q_O override values below.- */
-	/* 2: From ADC, most significant bits */
-	/* 3: I/Q after digital down mixing and channel filtering. */
-	/* 4: Full-spectrum White Noise (from CRC) */
-	/* 5: From ADC, least significant bits */
-	/* 6: RSSI / Cordic Magnitude Output */
-	/* 7: HSSD module. */
-	{'d', "DAC_SRC", CC2420_DACTST, 14, 12},
-	/* DAC override values, 5-bit */
-	{'i', "DAC_I_O", CC2420_DACTST, 11, 5},
-	{'q', "DAC_I_Q", CC2420_DACTST, 4, 0},
-	/* LNA and mixer gain: 0=automatic, 1,2,3=low,mid,high */
-	{'g', "LNAMIX_GAINMODE_O", CC2420_AGCCTRL, 3, 2},
-	/* VGA gain override: 0=automatic, 1=manual  */
-	{'V', "VGA_GAIN_OE", CC2420_AGCCTRL, 11, 11},
-	/* VGA gain: 0-127, non-linear, non-monotonic relationship btw. value and gain  */
-	/* read <= current gain, write => manual gain */
-	{'v', "VGA_GAIN", CC2420_AGCCTRL, 10, 4},
-	/* Modulation mode: 0=normal, 1=reverse phase */
-	{'P', "MOD_MODE", CC2420_MDMCTRL1, 4, 4},
-	/* Preamble length in bytes: 0-15=1-16 */
-	{'E', "PREAMBLE_LENGTH", CC2420_MDMCTRL0, 3, 0},
-	/* Carrier frequency in 1 MHz steps: 0-1023=2048-3071 MHz, 357=2405 MHz */
-	{'f', "FREQ", CC2420_FSCTRL, 9, 0},
-	/* Output PA level: 3=-25dB, 7=-15dB, 11=-10dB 15=-7dB 19=-5dB 23=-3dB 27=-1dB 31=0dB */
-	{'p', "PA_LEVEL", CC2420_TXCTRL, 4, 0},
-	/* 16-bit Syncword: 0xA70F="00" preamble, 0xA7FF="0" preamble, 0xA700="000" preamble */
-	{'S', "SYNCWORD", CC2420_SYNCWORD, 15, 0},
-	/* The time after the last chip in the packet is sent, and the TXRX switch is disabled. In μs. */
-	{'t', "TC_TXEND2SWITCH[2:0]", CC2420_FSMTC, 5, 3},
-	/* The time after the last chip in the packet is sent, and the PA is set in power-down. Also the time at which the modulator is disabled. In μs. */
-	{'T', "TC_TXEND2PAOFF[2:0]", CC2420_FSMTC, 2, 0},
-	{'A', "ATESTMOD_PD", CC2420_TOPTST, 4, 4},
-	/* ATEST mode: 0-7, we skip mode 8 */
-	{'a', "ATESTMOD_MODE[2:0]", CC2420_TOPTST, 2, 0},
-	{'K', "ADR_DECODE", CC2420_MDMCTRL0, 11, 11},
-	{'k', "AUTOACK", CC2420_MDMCTRL0, 4, 4},
-	{'B', "BATTMON_EN", CC2420_BATTMON, 5, 5},
-	{'b', "BATTMON_VOLTAGE", CC2420_BATTMON, 4, 0},
-	{'O', "BATTMON_OK", CC2420_BATTMON, 6, 6}, // read-only
-	{'F', "FIFO_THR", CC2420_IOCFG0, 6, 0},
-	{'I', "ADC_I", CC2420_ADCTST, 14, 8},
-	{'Q', "ADC_Q", CC2420_ADCTST, 6, 0},
-	{'e', "RESETn", CC2420_MAIN, 15, 15}, // wrtie '0' to reset radio
-	{'R', "RESERVED", CC2420_RESERVED, 15, 0},
-};
-
 void
 field_update(char c, char op)
 {
@@ -450,7 +471,7 @@ field_update(char c, char op)
 	unsigned reg, fv;
 	
 	for(fp=&field_list[0]; fp < &field_list[0] + sizeof(field_list)/sizeof(struct field); fp++) {
-		if(fp->cmd == c) {
+		if(fp->ch == c) {
 			reg = getreg(fp->addr);
 			fv = FV(reg, fp->msb, fp->lsb);
 			/* skip update when no op */
