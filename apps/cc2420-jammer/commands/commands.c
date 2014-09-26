@@ -22,7 +22,6 @@ extern int cc2420_packets_seen, cc2420_packets_read;
 
 static void (*callback)(int v);
 
-/* TODO: add a "help" command */
 /* TODO: a battery voltage reading command: scan through 32 BATTMON_VOLTAGE levels to find level at which the BATTMON_OK toggles, the convert to volt based formular in datasheet */
 
 struct field
@@ -331,7 +330,7 @@ static const struct command command_table[] =	{
 	{'s', "CC2420 status byte", status}
 };
 
-/* Print commands */
+/* Help message: available commands */
 static void
 help(void)
 {
