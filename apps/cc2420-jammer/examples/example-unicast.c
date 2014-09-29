@@ -38,7 +38,7 @@
  */
 
 #include "contiki.h"
-#include "net/rime.h"
+#include "net/rime/rime.h"
 #include "dev/button-sensor.h"
 #include "dev/serial-line.h"
 #include "dev/leds.h"
@@ -48,8 +48,8 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "dev/cc2420.h"
-#include "dev/cc2420_const.h"
+#include "dev/cc2420/cc2420.h"
+#include "dev/cc2420/cc2420_const.h"
 #include "lib/random.h"
 
 #include "commands.h"
@@ -88,7 +88,7 @@ sent_uc(struct unicast_conn *c, int status, int num_tx)
 }
 /*---------------------------------------------------------------------------*/
 static void
-recv_uc(struct unicast_conn *c, const rimeaddr_t *from)
+recv_uc(struct unicast_conn *c, const linkaddr_t *from)
 {
   /* printf("from %d.%d: %s\n", */
 	/* 			 from->u8[0], from->u8[1], (char *)packetbuf_dataptr()); */
@@ -143,7 +143,7 @@ PROCESS_THREAD(example_unicast_process, ev, data)
   unicast_open(&uc, 146, &unicast_callbacks);
 
   while(1) {
-		rimeaddr_t addr;
+		linkaddr_t addr;
     PROCESS_WAIT_EVENT();
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
 			if(seqno < max_tx_packets) {
@@ -156,7 +156,7 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 				packetbuf_copyfrom(str, payload_len);
 				addr.u8[0] = 101;
 				addr.u8[1] = 0;
-				if(rimeaddr_cmp(&addr, &rimeaddr_node_addr)) {
+				if(linkaddr_cmp(&addr, &linkaddr_node_addr)) {
 					unicast_send(&uc, &addr);
 					++seqno;
 				} else {
