@@ -80,6 +80,8 @@
 /* "SFD gap" = 298 us out of 4395 us Droplet interval => actual free air time = 298 - 160 (preamble+SFD) = 138 us => free bandwidth = 138/4395 = 3.1% */
 /* #define DEFAULT_RTIMER_INTERVAL (RTIMER_SECOND / 128) */
 #define RTIMER_INTERVAL ((RTIMER_SECOND + (225/2)) / 225 )
+#define DST_ADDR0 2
+#define DST_ADDR1 0
 
 #define AUTOACK (1 << 4)
 #define ADR_DECODE (1 << 11)
@@ -128,6 +130,7 @@ const static struct hex_seq droplets[] =	{
 };
 static int droplet_index;
 static uint8_t txfifo_data[128];
+static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
 static struct variable const user_variable_list[] = {
 	{'l', (union number*)&len_hdr, sizeof(len_hdr), "len_hdr", 0, 127},
@@ -138,6 +141,8 @@ static struct variable const user_variable_list[] = {
 	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
 	/* {'m', (union number*)&mode, sizeof(mode), "mode", 0, LAST_MODE}, */
+	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
+	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
 	{'\0', NULL, 0, NULL, -1, -1},
 };
 
@@ -177,11 +182,11 @@ print_hex_seq(const char *prefix, const uint8_t *data, size_t size)
 /*---------------------------------------------------------------------------*/
 /* CC2420 Serial TX mode */
 static void
-send_len(struct rtimer *t, void *ptr)
+send_serial(struct rtimer *t, void *ptr)
 {
 		if (ptr) {
 			/* schedule next send */
-			rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 2, 0, send_len, (void *)1);
+			rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 2, 0, send_serial, (void *)1);
 		
 			/* Test: set first transmitted bit = 1 */
 			CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
@@ -488,8 +493,8 @@ tx2_eth(void)
 		buf_ptr[2] = (uint8_t)(seqno & 0x00FF);
 		buf_ptr[3] = 0xFF;
 		buf_ptr[4] = 0xFF;
-		buf_ptr[5] = 0x02; // dest. rimeaddr lower byte
-		buf_ptr[6] = 0x00; // dest. rimeaddr higher byte
+		buf_ptr[5] = dst_addr.u8[1]; // dest. linkaddr higher byte
+		buf_ptr[6] = dst_addr.u8[0]; // dest. linkaddr lower byte
 		for(i = MHR_LEN;i < payload_len;++i) {
 			buf_ptr[i] = (uint8_t)random_rand();
 		}
@@ -613,11 +618,11 @@ PROCESS_THREAD(test_process, ev, data)
 	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	// change MAC address
-	/* node_id_burn(100); */
-	unsigned shortaddr = 1;
-	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	unsigned shortaddr;
+	/* unsigned shortaddr = 1; */
+	/* CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2); */
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
-	printf("shortaddr: %u\n", shortaddr);
+	printf("16-bit MAC addr: 0x%04X\n", shortaddr);
 
 	commands_set_callback(start_mode);
 
