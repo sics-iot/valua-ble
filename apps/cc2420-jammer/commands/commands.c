@@ -266,14 +266,16 @@ reverse_syncword(void)
 	printf("Syncword: 0x%X\n", reg);
 }
 /*---------------------------------------------------------------------------*/
+/* Change my MAC address, can be used to alter ACK behaviour */
 static void
 mac_update(void)
 {
 	unsigned shortaddr;
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
-	shortaddr = (shortaddr+1) & 0x000F;
+	// update higher byte only, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
+	shortaddr = (shortaddr+(1<<8))%(4<<8);
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
-	printf("16-bit MAC address: %u\n", shortaddr);
+	printf("16-bit MAC address: 0x%04X\n", shortaddr);
 }
 
 /*---------------------------------------------------------------------------*/

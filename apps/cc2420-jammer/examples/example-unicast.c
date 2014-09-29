@@ -60,11 +60,15 @@
 #define TX_INTERVAL (CLOCK_SECOND / 2)
 #define MAX_TX_PACKETS 10
 #define PAYLOAD_LEN (43-17) // contikimac SHORTEST_PACKET_SIZE - rime header size
+#define DST_ADDR0 2
+#define DST_ADDR1 0
 
 int mode;
 clock_time_t tx_interval = TX_INTERVAL;
 unsigned max_tx_packets = MAX_TX_PACKETS;
 int payload_len = PAYLOAD_LEN;
+static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
+
 struct etimer et;
 uint16_t seqno;
 
@@ -72,7 +76,11 @@ const struct variable user_variable_list[] = {
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
-	{'0', NULL, 1, NULL, -1, -1},
+	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
+	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
+	{'a', (union number*)&linkaddr_node_addr.u8[0], sizeof(linkaddr_node_addr.u8[0]), "linkaddr_node_addr.u8[0]", 0, 3},
+	{'A', (union number*)&linkaddr_node_addr.u8[1], sizeof(linkaddr_node_addr.u8[1]), "linkaddr_node_addr.u8[1]", 0, 3},
+	{'\0', NULL, 0, NULL, -1, -1},
 };
 
 /*---------------------------------------------------------------------------*/
@@ -82,7 +90,8 @@ AUTOSTART_PROCESSES(&example_unicast_process);
 static void
 sent_uc(struct unicast_conn *c, int status, int num_tx)
 {
-  printf("unicast message sent: seqno %u num_tx %d rx_time %u tx_time %u\n",
+  printf("unicast sent %u.%u -> %u.%u: seqno %u num_tx %d rx_time %u tx_time %u\n",
+				 linkaddr_node_addr.u8[0], linkaddr_node_addr.u8[1], dst_addr.u8[0], dst_addr.u8[1],
 				 seqno-1, num_tx, (unsigned)packetbuf_attr(PACKETBUF_ATTR_LISTEN_TIME),
     (unsigned)packetbuf_attr(PACKETBUF_ATTR_TRANSMIT_TIME));
 }
@@ -90,10 +99,11 @@ sent_uc(struct unicast_conn *c, int status, int num_tx)
 static void
 recv_uc(struct unicast_conn *c, const linkaddr_t *from)
 {
-  /* printf("from %d.%d: %s\n", */
-	/* 			 from->u8[0], from->u8[1], (char *)packetbuf_dataptr()); */
-  printf("%s\t",
-				 (char *)packetbuf_dataptr());
+  printf("%u.%u <- %u.%u: %s\n",
+				 linkaddr_node_addr.u8[0], linkaddr_node_addr.u8[1],
+				 from->u8[0], from->u8[1], (char *)packetbuf_dataptr());
+  /* printf("%s\t", */
+	/* 			 (char *)packetbuf_dataptr()); */
 }
 
 static const struct unicast_callbacks unicast_callbacks = {recv_uc, sent_uc};
@@ -126,10 +136,8 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
-	/* Set */
-	tx_interval = TX_INTERVAL;
-	payload_len = PAYLOAD_LEN;
-	max_tx_packets = MAX_TX_PACKETS;
+	/* Initialize user variable commands */
+	commands_set_user_vars(user_variable_list);
 
 	/* Change channel and Tx power */
   cc2420_set_channel(CHANNEL);
@@ -143,7 +151,6 @@ PROCESS_THREAD(example_unicast_process, ev, data)
   unicast_open(&uc, 146, &unicast_callbacks);
 
   while(1) {
-		linkaddr_t addr;
     PROCESS_WAIT_EVENT();
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
 			if(seqno < max_tx_packets) {
@@ -154,13 +161,15 @@ PROCESS_THREAD(example_unicast_process, ev, data)
 				snprintf(str, sizeof(str), "%u", seqno);
 
 				packetbuf_copyfrom(str, payload_len);
-				addr.u8[0] = 101;
-				addr.u8[1] = 0;
-				if(linkaddr_cmp(&addr, &linkaddr_node_addr)) {
-					unicast_send(&uc, &addr);
+				/* Send to destination address */
+				if(!linkaddr_cmp(&dst_addr, &linkaddr_node_addr)) {
+					unicast_send(&uc, &dst_addr);
 					++seqno;
+				/* Don't send to myself */
 				} else {
-					printf("^");
+					printf("%u.%u: no need to send to myself\n",
+								 linkaddr_node_addr.u8[0], linkaddr_node_addr.u8[1]);
+					etimer_stop(&et);
 				}
 			} else {
 				etimer_stop(&et);
