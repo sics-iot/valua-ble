@@ -16,8 +16,6 @@ unsigned min_lqi = 108, max_lqi = 0;
 
 static const struct variable *user_vars;
 
-extern int jam_ena;
-extern const unsigned char tx_power_level[10];
 extern int cc2420_packets_seen, cc2420_packets_read;
 
 static void (*callback)(int v);

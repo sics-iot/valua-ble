@@ -63,16 +63,15 @@
 #define DST_ADDR0 2
 #define DST_ADDR1 0
 
-int mode;
-clock_time_t tx_interval = TX_INTERVAL;
-unsigned max_tx_packets = MAX_TX_PACKETS;
-int payload_len = PAYLOAD_LEN;
+static clock_time_t tx_interval = TX_INTERVAL;
+static unsigned max_tx_packets = MAX_TX_PACKETS;
+static int payload_len = PAYLOAD_LEN;
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
-struct etimer et;
-uint16_t seqno;
+static struct etimer et;
+static uint16_t seqno;
 
-const struct variable user_variable_list[] = {
+static const struct variable user_variable_list[] = {
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},

@@ -129,8 +129,7 @@ const static struct hex_seq droplets[] =	{
 static int droplet_index;
 static uint8_t txfifo_data[128];
 
-const unsigned char tx_power_level[10] = {0,1,3,7,11,15,19,23,27,31};
-struct variable const user_variable_list[] = {
+static struct variable const user_variable_list[] = {
 	{'l', (union number*)&len_hdr, sizeof(len_hdr), "len_hdr", 0, 127},
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
