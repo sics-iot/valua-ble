@@ -493,8 +493,8 @@ tx2_eth(void)
 		buf_ptr[2] = (uint8_t)(seqno & 0x00FF);
 		buf_ptr[3] = 0xFF;
 		buf_ptr[4] = 0xFF;
-		buf_ptr[5] = dst_addr.u8[1]; // dest. linkaddr higher byte
-		buf_ptr[6] = dst_addr.u8[0]; // dest. linkaddr lower byte
+		buf_ptr[5] = dst_addr.u8[1]; // dest. linkaddr lower byte
+		buf_ptr[6] = dst_addr.u8[0]; // dest. linkaddr higher byte
 		for(i = MHR_LEN;i < payload_len;++i) {
 			buf_ptr[i] = (uint8_t)random_rand();
 		}
