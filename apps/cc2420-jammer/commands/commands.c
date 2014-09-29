@@ -87,6 +87,7 @@ const static struct field field_list[] = {
 	{'K', "ADR_DECODE", CC2420_MDMCTRL0, 11, 11},
 	{'k', "AUTOACK", CC2420_MDMCTRL0, 4, 4},
 	{'B', "BATTMON_EN", CC2420_BATTMON, 5, 5},
+	// Vtoggle=1.25/27*(72-BATTMON_VOLTAGE) (BATTMON_VOLTAGE=[0, 31] => Vtoggle=[1.90, 3.33])
 	{'b', "BATTMON_VOLTAGE", CC2420_BATTMON, 4, 0},
 	{'O', "BATTMON_OK", CC2420_BATTMON, 6, 6}, // read-only
 	{'F', "FIFO_THR", CC2420_IOCFG0, 6, 0},
@@ -311,6 +312,32 @@ status(void)
 	printf("0x%01X\n", status);
 }
 
+/* Show current battery level */
+/* Vtoggle=1.25/27*(72-BATTMON_VOLTAGE) */
+static void
+battery_level(void)
+{
+	unsigned lv, lv_orig;
+	unsigned ok;
+	unsigned reg;
+
+	reg = getreg(CC2420_BATTMON);
+	lv_orig = FV(reg, 4, 0);
+	setreg(CC2420_BATTMON, SETFV(reg, 1, 5, 5)); // BATTMON_EN=1
+	reg = getreg(CC2420_BATTMON);
+	for(lv=0;lv<32;lv++) {
+		setreg(CC2420_BATTMON, SETFV(reg, lv, 4, 0));
+		reg = getreg(CC2420_BATTMON);
+		ok = FV(reg, 6, 6);
+		/* printf("%u: %u\n", lv, ok); */
+		if(ok) break;
+	}
+
+	printf("Battery level is between %u and %u\n", lv-1, lv);
+	setreg(CC2420_BATTMON, SETFV(reg, 0, 5, 5)); // BATTMON_EN=0
+	setreg(CC2420_BATTMON, SETFV(reg, lv_orig, 4, 0)); // restore original monitor level
+}
+
 static const struct command command_table[] =	{
 	{'h', "Help", help},
 	{'e', "Reboot", reboot},
@@ -327,7 +354,8 @@ static const struct command command_table[] =	{
 	{'S', "Reverse sync word", reverse_syncword},
 	{'M', "MAC address update", mac_update},
 	{'L', "Show all registers", show_all_registers},
-	{'s', "CC2420 status byte", status}
+	{'s', "CC2420 status byte", status},
+	{'b', "Battery level", battery_level}
 };
 
 /* Help message: available commands */
