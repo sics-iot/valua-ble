@@ -20,8 +20,6 @@ extern int cc2420_packets_seen, cc2420_packets_read;
 
 static void (*callback)(int v);
 
-/* TODO: a battery voltage reading command: scan through 32 BATTMON_VOLTAGE levels to find level at which the BATTMON_OK toggles, the convert to volt based formular in datasheet */
-
 struct field
 {
 	char ch;
@@ -92,7 +90,9 @@ const static struct field field_list[] = {
 	{'I', "ADC_I", CC2420_ADCTST, 14, 8},
 	{'Q', "ADC_Q", CC2420_ADCTST, 6, 0},
 	{'e', "RESETn", CC2420_MAIN, 15, 15}, // wrtie '0' to reset radio
-	{'R', "RESERVED", CC2420_RESERVED, 15, 0},
+	{'u', "TX_TURNAROUND", CC2420_TXCTRL, 13, 13}, 
+	//Number of consecutive reference clock periods with successful synchronisation windows required to indicate lock: 64, 128, 256, 512
+	{'o', "LOCK_THR[1:0]", CC2420_FSCTRL, 15, 14}, 
 };
 
 // Individual command handlers
@@ -277,6 +277,7 @@ mac_update(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* Convert a hex number into 16 bit characters, MSB first */
 static char*
 u16_to_bits(uint16_t n, char bits[])
 {
@@ -350,7 +351,7 @@ static const struct command command_table[] =	{
 	{'v', "Successful pkt receptions", view_rx_statistics},
 	{'V', "Unsuccessful pkt receptions", view_failed_rx_statistics},
 	{'H', "Enter HSSD mode", debug_hssd},
-	{'A', "Enaable analog test mode", debug_analog},
+	{'A', "Enable analog test mode", debug_analog},
 	{'S', "Reverse sync word", reverse_syncword},
 	{'M', "MAC address update", mac_update},
 	{'L', "Show all registers", show_all_registers},
@@ -386,7 +387,6 @@ exec_command(char c)
 	}
 }
 
-
 static unsigned
 hexstr_to_unsigned(const char *s)
 {
@@ -410,7 +410,6 @@ print_reg(const char* hex_str)
 	char bits[17]; //16 bits + '\0'
 	
 	addr = hexstr_to_unsigned(hex_str);
-  /* if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) { */
   if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) {
 		reg = getreg(addr);
 		printf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits));
