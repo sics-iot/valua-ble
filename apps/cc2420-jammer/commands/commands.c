@@ -6,6 +6,7 @@
 #include "dev/cc2420/cc2420_const.h"
 #include "net/rime/rime.h"
 #include "dev/watchdog.h"
+#include "sys/node-id.h"
 
 #include "commands.h"
 
@@ -270,10 +271,24 @@ mac_update(void)
 {
 	unsigned shortaddr;
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
-	// update higher byte only, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
-	shortaddr = (shortaddr+(1<<8))%(4<<8);
+	// increment higher byte and clear lower byte, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
+	shortaddr = (shortaddr+(1<<8))%(4<<8) & 0xFF00;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	printf("16-bit MAC address: 0x%04X\n", shortaddr);
+}
+
+/*---------------------------------------------------------------------------*/
+/* Store 16 MAC address as permanent node ID in XMEM */
+static void
+burn_node_id(void)
+{
+	unsigned shortaddr;
+	unsigned id;
+	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	id = (shortaddr<<8)|(shortaddr>>8);
+	node_id_burn(id);
+	node_id_restore();
+	printf("node ID now set to %u\n", node_id);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -356,7 +371,8 @@ static const struct command command_table[] =	{
 	{'M', "MAC address update", mac_update},
 	{'L', "Show all registers", show_all_registers},
 	{'s', "CC2420 status byte", status},
-	{'b', "Battery level", battery_level}
+	{'b', "Battery level", battery_level},
+	{'N', "Burn noide id", burn_node_id}
 };
 
 /* Help message: available commands */

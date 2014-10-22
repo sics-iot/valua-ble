@@ -45,7 +45,6 @@
 #include "dev/spi.h"
 #include "dev/cc2420/cc2420.h"
 #include "dev/cc2420/cc2420_const.h"
-#include "node-id.h"
 #include "lib/random.h"
 #include "dev/radio.h"
 #include "dev/watchdog.h"
@@ -608,6 +607,7 @@ PROCESS_THREAD(test_process, ev, data)
 	PROCESS_PAUSE();
 
 	// debug prints
+	printf("%s was compiled at %s %s\n", __FILE__, __DATE__, __TIME__);
 	printf("F_CPU %lu CLOCK_CONF_SECOND %lu RTIMER_CONF_SECOND %u\n", F_CPU, CLOCK_CONF_SECOND, RTIMER_SECOND);
 
 	// hook user variables to command system
