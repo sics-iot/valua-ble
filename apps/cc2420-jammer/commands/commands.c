@@ -7,6 +7,7 @@
 #include "net/rime/rime.h"
 #include "dev/watchdog.h"
 #include "sys/node-id.h"
+#include "lib/crc16.h"
 
 #include "commands.h"
 
@@ -247,19 +248,22 @@ debug_analog(void)
 }
 /*---------------------------------------------------------------------------*/
 static void
-reverse_syncword(void)
+alter_syncword(void)
 {
-		/* test: send with non-standard sync word to avoid causing synchronization */
+	#define SW 4
+	const static uint16_t syncwords[SW] = {0xA70F, 0xA7FF, 0xA700, 0xCD0F};
+	int i;
 	uint16_t reg;
+
 	reg = getreg(CC2420_SYNCWORD);
-	/* reg = (reg & 0x00FF) | (~reg  & 0xFF00); */
-	
-	/* if (reg == 0xA70F) {reg = 0xA60F;} */
-	/* else if (reg == 0xA60F) {reg = 0x2E88;} */
-	/* else {reg = 0xA60F;} */
-	if (reg == 0xA70F) {reg = 0xA7FF;}
-	else if (reg == 0xA7FF) {reg = 0xA700;}
-	else {reg = 0xA70F;}
+	for(i = 0;i < SW;i++) {
+		if(syncwords[i] == reg) {
+			reg = syncwords[(i+1) % SW];
+			break;
+		}
+	}
+	if (i==SW) reg = syncwords[0];
+
 	setreg(CC2420_SYNCWORD, reg);
 	reg = getreg(CC2420_SYNCWORD);
 	printf("Syncword: 0x%X\n", reg);
@@ -289,6 +293,47 @@ burn_node_id(void)
 	node_id_burn(id);
 	node_id_restore();
 	printf("node ID now set to %u\n", node_id);
+}
+//
+static void
+read_tx_fifo(void)
+{
+	uint8_t byte[128];
+	CC2420_READ_RAM(&byte,CC2420RAM_TXFIFO, 128);
+	printf("TXFIFO content:\n");
+	int i;
+	for (i = 0;i < 128;i++) {
+		printf("%02x", byte[i]);
+	}
+	printf("\n");
+}
+
+static void
+write_tx_fifo(void)
+{
+	/* uint8_t byte = 3; */
+	/* CC2420_WRITE_RAM(&byte,CC2420RAM_TXFIFO+10, 1); */
+	/* printf("TXFIFO byte one %u\n", byte); */
+	uint8_t snippet[6] = {0x00, 0x00, 0xA7, 4, 0x30, 0x31};
+	unsigned short checksum;
+	checksum = crc16_data(&snippet[4], sizeof(snippet)-4, 0);
+	/* snippet[sizeof(snippet) - 2] = crc16>>8; */
+	/* snippet[sizeof(snippet) - 1] = crc16&0xFF; */
+	CC2420_WRITE_RAM(&snippet, CC2420RAM_TXFIFO, sizeof(snippet));
+	CC2420_WRITE_RAM(&checksum, CC2420RAM_TXFIFO+sizeof(snippet), 2);
+}
+
+static void
+read_rx_fifo(void)
+{
+	uint8_t byte[128];
+	CC2420_READ_RAM(&byte,CC2420RAM_RXFIFO, 128);
+	printf("RXFIFO content:\n");
+	int i;
+	for (i = 0;i < 128;i++) {
+		printf("%02x", byte[i]);
+	}
+	printf("\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -325,7 +370,7 @@ status(void)
 {
   uint8_t status;
   CC2420_GET_STATUS(status);
-	printf("0x%01X\n", status);
+	printf("Status 0x%01X\n", status);
 }
 
 /* Show current battery level */
@@ -367,12 +412,15 @@ static const struct command command_table[] =	{
 	{'V', "Unsuccessful pkt receptions", view_failed_rx_statistics},
 	{'H', "Enter HSSD mode", debug_hssd},
 	{'A', "Enable analog test mode", debug_analog},
-	{'S', "Reverse sync word", reverse_syncword},
+	{'S', "Alter sync word", alter_syncword},
 	{'M', "MAC address update", mac_update},
 	{'L', "Show all registers", show_all_registers},
 	{'s', "CC2420 status byte", status},
 	{'b', "Battery level", battery_level},
-	{'N', "Burn noide id", burn_node_id}
+	{'N', "Burn noide id", burn_node_id},
+	{'R', "Read TXFIFO", read_tx_fifo},
+	{'W', "Write TXFIFO", write_tx_fifo},
+	{'F', "Read RXFIFO", read_rx_fifo}
 };
 
 /* Help message: available commands */

