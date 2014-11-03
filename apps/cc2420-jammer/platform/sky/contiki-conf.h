@@ -17,7 +17,7 @@
 
 #ifndef NETSTACK_CONF_RDC
 /* #define NETSTACK_CONF_RDC     contikimac_driver */
-#define NETSTACK_CONF_RDC     rawrdc_driver
+#define NETSTACK_CONF_RDC     nullrdc_driver
 #endif /* NETSTACK_CONF_RDC */
 
 #ifndef NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE
