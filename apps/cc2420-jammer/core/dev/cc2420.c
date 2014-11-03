@@ -108,6 +108,7 @@ int cc2420_authority_level_of_sender;
 int cc2420_packets_seen, cc2420_packets_read;
 
 volatile int jam_ena;
+static void (*rx_callback)(void);
 
 static uint8_t volatile pending;
 
@@ -1013,7 +1014,9 @@ PROCESS_THREAD(cc2420_process, ev, data)
     
     packetbuf_set_datalen(len);
     
-    NETSTACK_RDC.input();
+    /* NETSTACK_RDC.input(); */
+		rx_callback();
+
 #if CC2420_TIMETABLE_PROFILING
     TIMETABLE_TIMESTAMP(cc2420_timetable, "end");
     timetable_aggregate_compute_detailed(&aggregate_time,
@@ -1255,3 +1258,8 @@ cc2420_set_cca_threshold(int value)
   RELEASE_LOCK();
 }
 /*---------------------------------------------------------------------------*/
+void
+cc2420_set_rx_callback(void (*callback)(void))
+{
+	rx_callback = callback;
+}

@@ -149,7 +149,6 @@ static struct variable const user_variable_list[] = {
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
-	/* {'m', (union number*)&mode, sizeof(mode), "mode", 0, LAST_MODE}, */
 	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
 	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
 	{'\0', NULL, 0, NULL, -1, -1},
@@ -157,6 +156,8 @@ static struct variable const user_variable_list[] = {
 
 PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
+
+static void packet_input(void);
 
 /*---------------------------------------------------------------------------*/
 static void
@@ -665,6 +666,9 @@ PROCESS_THREAD(test_process, ev, data)
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	printf("16-bit MAC addr: 0x%04X\n", shortaddr);
 
+	// set CC2420 packet reception callback
+	cc2420_set_rx_callback(&packet_input);
+
 	commands_set_callback(start_mode);
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
@@ -738,3 +742,18 @@ decision(long int n, uint8_t len, uint8_t *buf)
 	/* return 0; */
 }
 
+/*---------------------------------------------------------------------------*/
+static void
+packet_input(void)
+{
+	int len;
+	len = packetbuf_datalen();
+	if(len > 0) {
+		/* printf("%d: 0x", len); */
+		int i;
+		for(i = 0; i < len; i++) {
+			printf("%02x", *((unsigned char *)(packetbuf_dataptr() + i)));
+		}
+		printf("\n");
+	}
+}

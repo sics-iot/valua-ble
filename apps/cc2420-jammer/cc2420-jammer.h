@@ -25,4 +25,6 @@ void strobe(enum cc2420_register regname);
 unsigned int status(void);
 void flushrx(void);
 
+void cc2420_set_rx_callback(void (*callback)(void));
+
 #endif
