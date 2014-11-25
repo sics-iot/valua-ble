@@ -262,6 +262,10 @@ reset_transmitter(void)
 		reg &= ~(AUTOACK | ADR_DECODE);
 		setreg(CC2420_MDMCTRL0, reg);
 
+		/* Clear FIFOs */
+		strobe(CC2420_SFLUSHTX);
+		strobe(CC2420_SFLUSHRX);
+
   /* enter RX mode */
   /* strobe(CC2420_SRXON); */
 	strobe(CC2420_SRFOFF);
@@ -336,6 +340,7 @@ cs_mode(int new_mode)
 static void
 unmod_mode(int new_mode)
 {
+	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
 	send_carrier(new_mode);
 }
 
@@ -588,7 +593,7 @@ const static struct mode mode_list[] = {
 	{RX, "RX", rx_mode, NULL, NULL, NULL},
 	{OFF, "OFF", off_mode, NULL, NULL, NULL},
 	{CH, "Channel sampling", cs_mode, NULL, NULL, cs_eth},
-	{UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, NULL},
+	{UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, attack_eth},
 	{MOD, "Modulated carrier", mod_mode, stop_rtimer, NULL, attack_eth},
 	{TX, "TX broadcast", tx_mode, stop_rtimer, NULL, tx_eth},
 	{TX2, "TX unicast", tx2_mode, stop_rtimer, NULL, tx2_eth},
@@ -755,5 +760,12 @@ packet_input(void)
 			printf("%02x", *((unsigned char *)(packetbuf_dataptr() + i)));
 		}
 		printf("\n");
+
+		sum_rssi +=  (long int)((int16_t)packetbuf_attr(PACKETBUF_ATTR_RSSI));
+		sum_lqi +=  packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY);
+		min_rssi = (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) < min_rssi ? (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) : min_rssi;
+		max_rssi = (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) > max_rssi ? (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) : max_rssi;
+		min_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) < min_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : min_lqi;
+		max_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) > max_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : max_lqi;
 	}
 }

@@ -15,6 +15,8 @@
 
 extern long int sum_rssi;
 extern long unsigned sum_lqi;
+extern int min_rssi, max_rssi;
+extern unsigned min_lqi, max_lqi;
 /* extern uint8_t hex_seq[]; */
 
 unsigned getreg(enum cc2420_register regname);

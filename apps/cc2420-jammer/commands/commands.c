@@ -193,7 +193,7 @@ view_tx_power_level(void){
 }
 /*---------------------------------------------------------------------------*/
 /* High speed serial debug mode */
-// 8 modes: 0: Off (default) 1: AGC status output 2: ADC I/Q output 3: down mixer I/Q output 4: na 5: na 6: adc input 7: dac input
+// 8 modes: 0: Off (default) 1: AGC status output 2: Output ADC I/Q 3: Output down mixer I/Q 4: NA 5: NA 6: Input ADC I/Q 7: Input DAC I/Q
 static void
 debug_hssd(void)
 {

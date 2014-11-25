@@ -21,7 +21,7 @@ all: cc2420-jammer
 
 # add paths of overloading Contiki source files, which should take precedence over standard Contiki paths
 CONTIKI_OVERLOAD = .
-PROJECTDIRS += ${addprefix $(CONTIKI_OVERLOAD)/, core/net/mac core/dev}
+PROJECTDIRS += ${addprefix $(CONTIKI_OVERLOAD)/, core/dev}
 ifeq ($(TARGET), z1)
 PROJECTDIRS += ${addprefix $(CONTIKI_OVERLOAD)/, platform/z1 cpu/msp430/f2xxx cpu/msp430/f1xxx}
 else
