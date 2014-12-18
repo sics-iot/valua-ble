@@ -43,7 +43,7 @@
 #include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "dev/spi.h"
-#include "dev/cc2420/cc2420.h"
+#include "cc2420.h"
 #include "dev/cc2420/cc2420_const.h"
 #include "lib/random.h"
 #include "dev/radio.h"
