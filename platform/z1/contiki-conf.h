@@ -68,7 +68,7 @@
 #define NETSTACK_CONF_NETWORK rime_driver
 #define NETSTACK_CONF_MAC     csma_driver
 #define NETSTACK_CONF_RDC     contikimac_driver
-#define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE 8
+#define NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE 16
 #define NETSTACK_CONF_FRAMER  framer_802154
 
 #define CC2420_CONF_AUTOACK              1
@@ -130,7 +130,7 @@
 
 #define UART0_CONF_TX_WITH_INTERRUPT 0 // So far, printfs without interrupt.
 
-#ifdef WITH_UIP6
+#if WITH_UIP6
 
 #define LINKADDR_CONF_SIZE              8
 
@@ -172,6 +172,7 @@
 #else /* WITH_UIP6 */
 #define UIP_CONF_IP_FORWARD      1
 #define UIP_CONF_BUFFER_SIZE     108
+#define UIP_CONF_IPV6 0
 #endif /* WITH_UIP6 */
 
 #define UIP_CONF_ICMP_DEST_UNREACH 1

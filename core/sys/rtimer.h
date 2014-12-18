@@ -130,6 +130,7 @@ void rtimer_run_next(void);
  * \hideinitializer
  */
 #define RTIMER_NOW() rtimer_arch_now()
+#define RTIMER_NOW_DCO() rtimer_arch_now_dco()
 
 /**
  * \brief      Get the time that a task last was executed

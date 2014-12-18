@@ -2,7 +2,7 @@
 
 CONTIKI_TARGET_SOURCEFILES += contiki-sky-platform.c \
 	sht11.c sht11-sensor.c light-sensor.c battery-sensor.c \
-	button-sensor.c radio-sensor.c
+	button-sensor.c #radio-sensor.c
 
 ifndef SMALL
 SMALL=1
@@ -10,8 +10,13 @@ endif
 
 include $(CONTIKI)/platform/sky/Makefile.common
 
-MODULES += core/net/ipv6 core/net/ipv4 core/net/rime core/net/mac \
-           core/net core/net/ip core/net/rpl \
-           core/net/mac/contikimac core/net/mac/cxmac \
-           core/net/llsec core/net/llsec/noncoresec \
+# MODULES += core/net/ipv6 core/net/ipv4 core/net/rime core/net/mac \
+#            core/net core/net/ip core/net/rpl \
+#            core/net/mac/contikimac core/net/mac/cxmac \
+#            dev/cc2420 dev/sht11 dev/ds2411
+
+# Zhitao: no IP, thanks.
+MODULES += core/net/rime core/net/mac \
+           core/net \
+           core/net/mac/contikimac \
            dev/cc2420 dev/sht11 dev/ds2411

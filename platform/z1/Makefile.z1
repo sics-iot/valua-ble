@@ -9,7 +9,12 @@ ifeq ($(ZOLERTIA_Z1SP),1)
 include $(CONTIKI)/platform/z1/Makefile.z1sp
 endif
 
-MODULES += core/net core/net/ip core/net/ipv6 core/net/ipv4 core/net/rpl \
+# MODULES += core/net core/net/ip core/net/ipv6 core/net/ipv4 core/net/rpl \
+#            core/net/rime core/net/mac core/net/mac/contikimac \
+#            dev/cc2420 dev/sht11
+
+# Zhitao: no IP, thanks.
+MODULES += core/net \
            core/net/rime core/net/mac core/net/mac/contikimac \
            core/net/llsec \
            dev/cc2420 dev/sht11

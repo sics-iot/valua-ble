@@ -54,7 +54,8 @@
 #define PLATFORM_HAS_RADIO   1
 
 /* CPU target speed in Hz */
-#define F_CPU 3900000uL /*2457600uL*/
+/* #define F_CPU 3900000uL /\*2457600uL*\/ */
+#define F_CPU 4000000uL /*2457600uL*/
 
 /* Our clock resolution, this is the same as Unix HZ. */
 #define CLOCK_CONF_SECOND 128UL

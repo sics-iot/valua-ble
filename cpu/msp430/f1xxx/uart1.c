@@ -193,6 +193,11 @@ uart1_init(unsigned long ubr)
     /* 9600, 19200, 38400 don't require any correction */
     UMCTL1 = 0x00;
 
+#elif F_CPU == 4000000ul
+  case UART1_BAUD2UBR(115200ul):
+    UMCTL1 = 0xDD;
+    break;
+
 #else
 
 #error Unsupported CPU speed in uart1.c
