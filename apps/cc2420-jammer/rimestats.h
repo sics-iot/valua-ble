@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Swedish Institute of Computer Science.
+ * Copyright (c) 2007, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,45 +32,38 @@
 
 /**
  * \file
- *         Utility to store a node id in the external flash
+ *         Header file for Rime statistics
  * \author
  *         Adam Dunkels <adam@sics.se>
  */
 
-#include "sys/node-id.h"
-/* #include "contiki-conf.h" */
-#include "platform-conf.h"
-#include "dev/xmem.h"
-#include <string.h>
+#ifndef RIMESTATS_H_
+#define RIMESTATS_H_
 
-unsigned short node_id = 0;
-unsigned char node_mac[8];
+struct rimestats {
+  unsigned long tx, rx;
 
-/*---------------------------------------------------------------------------*/
-void
-node_id_restore(void)
-{
-  unsigned char buf[12];
-  xmem_pread(buf, 12, NODE_ID_XMEM_OFFSET);
-  if(buf[0] == 0xad &&
-     buf[1] == 0xde) {
-    node_id = (buf[2] << 8) | buf[3];
-    memcpy(node_mac, &buf[4], 8);
-  } else {
-    node_id = 0;
-  }
-}
-/*---------------------------------------------------------------------------*/
-void
-node_id_burn(unsigned short id)
-{
-  unsigned char buf[12];
-  memset(buf, 0, sizeof(buf));
-  buf[0] = 0xad;
-  buf[1] = 0xde;
-  buf[2] = id >> 8;
-  buf[3] = id & 0xff;
-  xmem_erase(XMEM_ERASE_UNIT_SIZE, NODE_ID_XMEM_OFFSET);
-  xmem_pwrite(buf, 12, NODE_ID_XMEM_OFFSET);
-}
-/*---------------------------------------------------------------------------*/
+  unsigned long reliabletx, reliablerx,
+    rexmit, acktx, noacktx, ackrx, timedout, badackrx;
+
+  /* Reasons for dropping incoming packets: */
+  unsigned long toolong, tooshort, badsynch, badcrc;
+
+  unsigned long contentiondrop, /* Packet dropped due to contention */
+    sendingdrop; /* Packet dropped when we were sending a packet */
+
+  unsigned long lltx, llrx;
+};
+
+#if RIMESTATS_CONF_ENABLED
+/* Don't access this variable directly, use RIMESTATS_ADD and RIMESTATS_GET */
+extern struct rimestats rimestats;
+
+#define RIMESTATS_ADD(x) rimestats.x++
+#define RIMESTATS_GET(x) rimestats.x
+#else /* RIMESTATS_CONF_ENABLED */
+#define RIMESTATS_ADD(x)
+#define RIMESTATS_GET(x) 0
+#endif /* RIMESTATS_CONF_ENABLED */
+
+#endif /* RIMESTATS_H_ */

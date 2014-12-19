@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Swedish Institute of Computer Science.
+ * Copyright (c) 2007, Swedish Institute of Computer Science.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,45 +32,14 @@
 
 /**
  * \file
- *         Utility to store a node id in the external flash
+ *         A brief description of what this file is.
  * \author
  *         Adam Dunkels <adam@sics.se>
  */
 
-#include "sys/node-id.h"
-/* #include "contiki-conf.h" */
-#include "platform-conf.h"
-#include "dev/xmem.h"
-#include <string.h>
-
-unsigned short node_id = 0;
-unsigned char node_mac[8];
-
+#include "rimestats.h"
 /*---------------------------------------------------------------------------*/
-void
-node_id_restore(void)
-{
-  unsigned char buf[12];
-  xmem_pread(buf, 12, NODE_ID_XMEM_OFFSET);
-  if(buf[0] == 0xad &&
-     buf[1] == 0xde) {
-    node_id = (buf[2] << 8) | buf[3];
-    memcpy(node_mac, &buf[4], 8);
-  } else {
-    node_id = 0;
-  }
-}
-/*---------------------------------------------------------------------------*/
-void
-node_id_burn(unsigned short id)
-{
-  unsigned char buf[12];
-  memset(buf, 0, sizeof(buf));
-  buf[0] = 0xad;
-  buf[1] = 0xde;
-  buf[2] = id >> 8;
-  buf[3] = id & 0xff;
-  xmem_erase(XMEM_ERASE_UNIT_SIZE, NODE_ID_XMEM_OFFSET);
-  xmem_pwrite(buf, 12, NODE_ID_XMEM_OFFSET);
-}
+
+struct rimestats rimestats;
+
 /*---------------------------------------------------------------------------*/

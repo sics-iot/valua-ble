@@ -13,8 +13,6 @@ endif
 #            core/net/rime core/net/mac core/net/mac/contikimac \
 #            dev/cc2420 dev/sht11
 
-# Zhitao: no IP, thanks.
+# Zhitao: no IP or Rime, thanks.
 MODULES += core/net \
-           core/net/rime core/net/mac core/net/mac/contikimac \
-           core/net/llsec \
            dev/cc2420 dev/sht11

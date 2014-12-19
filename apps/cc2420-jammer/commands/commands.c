@@ -4,7 +4,8 @@
 
 #include "cc2420.h"
 #include "dev/cc2420/cc2420_const.h"
-#include "net/rime/rime.h"
+/* #include "net/rime/rime.h" */
+#include "net/rime/rimestats.h"
 #include "dev/watchdog.h"
 #include "sys/node-id.h"
 #include "lib/crc16.h"

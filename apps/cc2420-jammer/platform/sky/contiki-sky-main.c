@@ -30,55 +30,28 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h> 
-
 #include "contiki.h"
 #include "cc2420.h"
+#include "dev/ds2411/ds2411.h"
 #include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "dev/slip.h"
-#include "dev/uart0.h"
+#include "dev/uart1.h"
 #include "dev/watchdog.h"
 #include "dev/xmem.h"
 #include "lib/random.h"
 #include "net/netstack.h"
 #include "net/mac/frame802154.h"
-#include "dev/button-sensor.h"
-#include "dev/adxl345.h"
-#include "sys/clock.h"
-
 #include "net/linkaddr.h"
-
 #include "sys/node-id.h"
-#include "cfs-coffee-arch.h"
-#include "cfs/cfs-coffee.h"
-#include "sys/autostart.h"
-
-#include "dev/battery-sensor.h"
-#include "dev/button-sensor.h"
-#include "dev/sht11/sht11-sensor.h"
-
-SENSORS(&button_sensor);
-
-extern unsigned char node_mac[8];
 
 #if DCOSYNCH_CONF_ENABLED
 static struct timer mgt_timer;
 #endif
-
-#define NETSTACK_CONF_WITH_IPV4 0
-
-#define DEBUG 1
-#if DEBUG
-#include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
-#else
-#define PRINTF(...)
-#endif
+extern int msp430_dco_required;
 
 void init_platform(void);
 
-/*---------------------------------------------------------------------------*/
 static void
 set_rime_addr(void)
 {
@@ -88,7 +61,7 @@ set_rime_addr(void)
   memset(&addr, 0, sizeof(linkaddr_t));
   if(node_id == 0) {
     for(i = 0; i < sizeof(linkaddr_t); ++i) {
-      addr.u8[i] = node_mac[7 - i];
+      addr.u8[i] = ds2411_id[7 - i];
     }
   } else {
     addr.u8[0] = node_id & 0xff;
@@ -102,8 +75,9 @@ set_rime_addr(void)
   printf("%d\n", addr.u8[i]);
 }
 /*---------------------------------------------------------------------------*/
+#if !PROCESS_CONF_NO_PROCESS_NAMES
 static void
-print_processes(struct process *const processes[])
+print_processes(struct process * const processes[])
 {
   /*  const struct process * const * p = processes;*/
   printf("Starting");
@@ -113,7 +87,12 @@ print_processes(struct process *const processes[])
   }
   putchar('\n');
 }
+#endif /* !PROCESS_CONF_NO_PROCESS_NAMES */
 /*--------------------------------------------------------------------------*/
+#if WITH_TINYOS_AUTO_IDS
+uint16_t TOS_NODE_ID = 0x1234; /* non-zero */
+uint16_t TOS_LOCAL_ADDRESS = 0x1234; /* non-zero */
+#endif /* WITH_TINYOS_AUTO_IDS */
 int
 main(int argc, char **argv)
 {
@@ -125,68 +104,46 @@ main(int argc, char **argv)
   leds_init();
   leds_on(LEDS_RED);
 
-  clock_wait(100);
 
-  uart0_init(BAUD2UBR(115200)); /* Must come before first printf */
+  uart1_init(BAUD2UBR(115200)); /* Must come before first printf */
 
+  leds_on(LEDS_GREEN);
+  ds2411_init();
+
+  /* XXX hack: Fix it so that the 802.15.4 MAC address is compatible
+     with an Ethernet MAC address - byte 0 (byte 2 in the DS ID)
+     cannot be odd. */
+  ds2411_id[2] &= 0xfe;
+
+  leds_on(LEDS_BLUE);
   xmem_init();
 
+  leds_off(LEDS_RED);
   rtimer_init();
   /*
    * Hardware initialization done!
    */
 
+  
+#if WITH_TINYOS_AUTO_IDS
+  node_id = TOS_NODE_ID;
+#else /* WITH_TINYOS_AUTO_IDS */
   /* Restore node id if such has been stored in external mem */
   node_id_restore();
+#endif /* WITH_TINYOS_AUTO_IDS */
 
-  /* If no MAC address was burned, we use the node id or the Z1 product ID */
-  if(!(node_mac[0] | node_mac[1] | node_mac[2] | node_mac[3] |
-       node_mac[4] | node_mac[5] | node_mac[6] | node_mac[7])) {
-
-/* #ifdef SERIALNUM */
-/*     if(!node_id) { */
-/*       PRINTF("Node id is not set, using Z1 product ID\n"); */
-/*       node_id = SERIALNUM; */
-/*     } */
-/* #endif */
-    node_mac[0] = 0xc1;  /* Hardcoded for Z1 */
-    node_mac[1] = 0x0c;  /* Hardcoded for Revision C */
-    node_mac[2] = 0x00;  /* Hardcoded to arbitrary even number so that
-                            the 802.15.4 MAC address is compatible with
-                            an Ethernet MAC address - byte 0 (byte 2 in
-                            the DS ID) */
-    node_mac[3] = 0x00;  /* Hardcoded */
-    node_mac[4] = 0x00;  /* Hardcoded */
-    node_mac[5] = 0x00;  /* Hardcoded */
-    node_mac[6] = node_id >> 8;
-    node_mac[7] = node_id & 0xff;
-  }
-
-  /* Overwrite node MAC if desired at compile time */
-#ifdef MACID
-#warning "***** CHANGING DEFAULT MAC *****"
-  node_mac[0] = 0xc1;  /* Hardcoded for Z1 */
-  node_mac[1] = 0x0c;  /* Hardcoded for Revision C */
-  node_mac[2] = 0x00;  /* Hardcoded to arbitrary even number so that
-                          the 802.15.4 MAC address is compatible with
-                          an Ethernet MAC address - byte 0 (byte 2 in
-                          the DS ID) */
-  node_mac[3] = 0x00;  /* Hardcoded */
-  node_mac[4] = 0x00;  /* Hardcoded */
-  node_mac[5] = 0x00;  /* Hardcoded */
-  node_mac[6] = MACID >> 8;
-  node_mac[7] = MACID & 0xff;
-#endif
-
-#ifdef IEEE_802154_MAC_ADDRESS
   /* for setting "hardcoded" IEEE 802.15.4 MAC addresses */
+#ifdef IEEE_802154_MAC_ADDRESS
   {
     uint8_t ieee[] = IEEE_802154_MAC_ADDRESS;
-    memcpy(node_mac, ieee, sizeof(uip_lladdr.addr));
-    node_mac[7] = node_id & 0xff;
+    memcpy(ds2411_id, ieee, sizeof(uip_lladdr.addr));
+    ds2411_id[7] = node_id & 0xff;
   }
-#endif /* IEEE_802154_MAC_ADDRESS */
+#endif
 
+  random_init(ds2411_id[0] + node_id);
+  
+  leds_off(LEDS_BLUE);
   /*
    * Initialize Contiki and our processes.
    */
@@ -198,14 +155,12 @@ main(int argc, char **argv)
   init_platform();
 
   set_rime_addr();
-
+  
   cc2420_init();
-  accm_init();
-
   {
     uint8_t longaddr[8];
     uint16_t shortaddr;
-
+    
     shortaddr = (linkaddr_node_addr.u8[0] << 8) +
       linkaddr_node_addr.u8[1];
     memset(longaddr, 0, sizeof(longaddr));
@@ -213,22 +168,20 @@ main(int argc, char **argv)
     printf("MAC %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ",
            longaddr[0], longaddr[1], longaddr[2], longaddr[3],
            longaddr[4], longaddr[5], longaddr[6], longaddr[7]);
-
+    
     cc2420_set_pan_addr(IEEE802154_PANID, shortaddr, longaddr);
   }
 
-  leds_off(LEDS_ALL);
-
-/* #ifdef SERIALNUM */
-/*   PRINTF("Ref ID: %u\n", SERIALNUM); */
-/* #endif */
-  PRINTF(CONTIKI_VERSION_STRING " started. ");
-
-  if(node_id) {
-    PRINTF("Node id is set to %u.\n", node_id);
+  printf(CONTIKI_VERSION_STRING " started. ");
+  if(node_id > 0) {
+    printf("Node id is set to %u.\n", node_id);
   } else {
-    PRINTF("Node id not set\n");
+    printf("Node id is not set.\n");
   }
+
+  /*  printf("MAC %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
+	 ds2411_id[0], ds2411_id[1], ds2411_id[2], ds2411_id[3],
+	 ds2411_id[4], ds2411_id[5], ds2411_id[6], ds2411_id[7]);*/
 
   /* NETSTACK_RDC.init(); */
   /* NETSTACK_MAC.init(); */
@@ -236,24 +189,30 @@ main(int argc, char **argv)
 
   /* printf("%s %s, channel check rate %lu Hz, radio channel %u\n", */
   /*        NETSTACK_MAC.name, NETSTACK_RDC.name, */
-  /*        CLOCK_SECOND / (NETSTACK_RDC.channel_check_interval() == 0 ? 1 : */
+  /*        CLOCK_SECOND / (NETSTACK_RDC.channel_check_interval() == 0? 1: */
   /*                        NETSTACK_RDC.channel_check_interval()), */
   /*        CC2420_CONF_CHANNEL); */
 
-  uart0_set_input(serial_line_input_byte);
+  uart1_set_input(serial_line_input_byte);
   serial_line_init();
 
   leds_off(LEDS_GREEN);
 
 #if TIMESYNCH_CONF_ENABLED
   timesynch_init();
-  timesynch_set_authority_level(linkaddr_node_addr.u8[0]);
+  timesynch_set_authority_level((linkaddr_node_addr.u8[0] << 4) + 16);
 #endif /* TIMESYNCH_CONF_ENABLED */
 
   energest_init();
   ENERGEST_ON(ENERGEST_TYPE_CPU);
 
+  watchdog_start();
+
+#if !PROCESS_CONF_NO_PROCESS_NAMES
   print_processes(autostart_processes);
+#else /* !PROCESS_CONF_NO_PROCESS_NAMES */
+  putchar('\n'); /* include putchar() */
+#endif /* !PROCESS_CONF_NO_PROCESS_NAMES */
   autostart_start(autostart_processes);
 
   /*
@@ -262,7 +221,7 @@ main(int argc, char **argv)
 #if DCOSYNCH_CONF_ENABLED
   timer_set(&mgt_timer, DCOSYNCH_PERIOD * CLOCK_SECOND);
 #endif
-  watchdog_start();
+
   /*  watchdog_stop();*/
   while(1) {
     int r;
@@ -275,38 +234,46 @@ main(int argc, char **argv)
     /*
      * Idle processing.
      */
-    int s = splhigh();    /* Disable interrupts. */
-    /* uart0_active is for avoiding LPM3 when still sending or receiving */
-    if(process_nevents() != 0 || uart0_active()) {
-      splx(s);      /* Re-enable interrupts. */
+    int s = splhigh();		/* Disable interrupts. */
+    /* uart1_active is for avoiding LPM3 when still sending or receiving */
+    if(process_nevents() != 0 || uart1_active()) {
+      splx(s);			/* Re-enable interrupts. */
     } else {
       static unsigned long irq_energest = 0;
 
 #if DCOSYNCH_CONF_ENABLED
       /* before going down to sleep possibly do some management */
       if(timer_expired(&mgt_timer)) {
-        timer_reset(&mgt_timer);
-        msp430_sync_dco();
+        watchdog_periodic();
+	timer_reset(&mgt_timer);
+	msp430_sync_dco();
+#if CC2420_CONF_SFD_TIMESTAMPS
+        cc2420_arch_sfd_init();
+#endif /* CC2420_CONF_SFD_TIMESTAMPS */
       }
 #endif
-
+      
       /* Re-enable interrupts and go to sleep atomically. */
       ENERGEST_OFF(ENERGEST_TYPE_CPU);
       ENERGEST_ON(ENERGEST_TYPE_LPM);
       /* We only want to measure the processing done in IRQs when we
-         are asleep, so we discard the processing time done when we
-         were awake. */
+	 are asleep, so we discard the processing time done when we
+	 were awake. */
       energest_type_set(ENERGEST_TYPE_IRQ, irq_energest);
       watchdog_stop();
-      _BIS_SR(GIE | SCG0 | SCG1 | CPUOFF); /* LPM3 sleep. This
-                                              statement will block
-                                              until the CPU is
-                                              woken up by an
-                                              interrupt that sets
-                                              the wake up flag. */
-
+      /* check if the DCO needs to be on - if so - only LPM 1 */
+      if (msp430_dco_required) {
+	_BIS_SR(GIE | CPUOFF); /* LPM1 sleep for DMA to work!. */
+      } else {
+	_BIS_SR(GIE | SCG0 | SCG1 | CPUOFF); /* LPM3 sleep. This
+						statement will block
+						until the CPU is
+						woken up by an
+						interrupt that sets
+						the wake up flag. */
+      }
       /* We get the current processing time for interrupts that was
-         done during the LPM and store it for next time around.  */
+	 done during the LPM and store it for next time around.  */
       dint();
       irq_energest = energest_type_time(ENERGEST_TYPE_IRQ);
       eint();
@@ -326,4 +293,3 @@ log_message(char *m1, char *m2)
   printf("%s%s\n", m1, m2);
 }
 #endif /* LOG_CONF_ENABLED */
-

@@ -3,13 +3,13 @@ ifndef TARGET
 TARGET=z1
 endif
 
-PROJECT_SOURCEFILES += commands.c
+PROJECT_SOURCEFILES += rimestats.c commands.c
 
 # save intermediate output files, i.e. preprocessor .i outputs and assembler .S outputs, in the same dir as the .o ojbect files
 # e.g. "make TARGET=z1" puts cc2420.s and cc2420.i along with cc2420.o in dir "./obj_z1"
 SAVE_TEMPS= -save-temps=obj
 
-CFLAGS = -DENABLE_CCA_INTERRUPT=1 -DENABLE_UNBUFFERED_MODE=0 -DENABLE_FAST_TX=0 -DCC2420_CONF_AUTOACK=0 -DCCA_TEST=0 -DRIMESTATS_CONF_ENABLED=1 $(SAVE_TEMPS)
+CFLAGS = -DENABLE_CCA_INTERRUPT=1 -DENABLE_UNBUFFERED_MODE=0 -DENABLE_FAST_TX=0 -DCC2420_CONF_AUTOACK=0 -DCCA_TEST=0 -DRIMESTATS_CONF_ENABLED=1 -DCONTIKI_WITH_RIME=1 $(SAVE_TEMPS)
 
 # CFLAGS += -DRTIMER_CONF_SECOND=\(8192\)
 
