@@ -16,4 +16,4 @@ include $(CONTIKI)/platform/sky/Makefile.common
 #            dev/cc2420 dev/sht11 dev/ds2411
 
 # Zhitao: no IP, thanks.
-MODULES += core/net dev/ds2411 dev/cc2420 dev/sht11
+MODULES += core/net dev/ds2411 dev/sht11

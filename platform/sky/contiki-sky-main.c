@@ -31,7 +31,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "contiki.h"
-#include "cc2420.h"
+/* #include "cc2420.h" */
 #include "dev/ds2411/ds2411.h"
 #include "dev/leds.h"
 #include "dev/serial-line.h"
@@ -156,21 +156,21 @@ main(int argc, char **argv)
 
   set_rime_addr();
   
-  cc2420_init();
-  {
-    uint8_t longaddr[8];
-    uint16_t shortaddr;
+  /* cc2420_init(); */
+  /* { */
+  /*   uint8_t longaddr[8]; */
+  /*   uint16_t shortaddr; */
     
-    shortaddr = (linkaddr_node_addr.u8[0] << 8) +
-      linkaddr_node_addr.u8[1];
-    memset(longaddr, 0, sizeof(longaddr));
-    linkaddr_copy((linkaddr_t *)&longaddr, &linkaddr_node_addr);
-    printf("MAC %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ",
-           longaddr[0], longaddr[1], longaddr[2], longaddr[3],
-           longaddr[4], longaddr[5], longaddr[6], longaddr[7]);
+  /*   shortaddr = (linkaddr_node_addr.u8[0] << 8) + */
+  /*     linkaddr_node_addr.u8[1]; */
+  /*   memset(longaddr, 0, sizeof(longaddr)); */
+  /*   linkaddr_copy((linkaddr_t *)&longaddr, &linkaddr_node_addr); */
+  /*   printf("MAC %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x ", */
+  /*          longaddr[0], longaddr[1], longaddr[2], longaddr[3], */
+  /*          longaddr[4], longaddr[5], longaddr[6], longaddr[7]); */
     
-    cc2420_set_pan_addr(IEEE802154_PANID, shortaddr, longaddr);
-  }
+  /*   cc2420_set_pan_addr(IEEE802154_PANID, shortaddr, longaddr); */
+  /* } */
 
   printf(CONTIKI_VERSION_STRING " started. ");
   if(node_id > 0) {

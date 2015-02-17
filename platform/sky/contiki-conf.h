@@ -42,7 +42,7 @@
 #define XMAC_CONF_COMPOWER               1
 #define CXMAC_CONF_COMPOWER              1
 
-#if WITH_UIP6
+#if NETSTACK_CONF_WITH_UIP6
 /* Network setup for IPv6 */
 #define NETSTACK_CONF_NETWORK sicslowpan_driver
 
@@ -60,7 +60,7 @@
 #define QUEUEBUF_CONF_NUM                8
 #endif
 
-#else /* WITH_UIP6 */
+#else /* NETSTACK_CONF_WITH_UIP6 */
 
 /* Network setup for non-IPv6 (rime). */
 
