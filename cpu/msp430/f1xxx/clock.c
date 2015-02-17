@@ -89,7 +89,8 @@ ISR(TIMERA1, timera1)
 #endif
       if(count % CLOCK_CONF_SECOND == 0) {
 	++seconds;
-        energest_flush();
+	//Zhitao: comment out following call to energest to save a few bytes
+        /* energest_flush(); */
       }
       last_tar = read_tar();
     }
