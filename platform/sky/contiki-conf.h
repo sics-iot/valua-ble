@@ -1,4 +1,5 @@
 /* -*- C -*- */
+/* @(#)$Id: contiki-conf.h,v 1.91 2011/01/09 21:04:14 adamdunkels Exp $ */
 
 #ifndef CONTIKI_CONF_H
 #define CONTIKI_CONF_H
@@ -10,11 +11,13 @@
 #endif /* PLATFORM_CONF_H */
 
 #ifndef NETSTACK_CONF_MAC
-#define NETSTACK_CONF_MAC     csma_driver
+/* #define NETSTACK_CONF_MAC     csma_driver */
+#define NETSTACK_CONF_MAC     nullmac_driver
 #endif /* NETSTACK_CONF_MAC */
 
 #ifndef NETSTACK_CONF_RDC
-#define NETSTACK_CONF_RDC     contikimac_driver
+/* #define NETSTACK_CONF_RDC     contikimac_driver */
+#define NETSTACK_CONF_RDC     nullrdc_driver
 #endif /* NETSTACK_CONF_RDC */
 
 #ifndef NETSTACK_CONF_RDC_CHANNEL_CHECK_RATE
@@ -26,11 +29,7 @@
 #endif /* NETSTACK_CONF_RADIO */
 
 #ifndef NETSTACK_CONF_FRAMER
-#if NETSTACK_CONF_WITH_IPV6
 #define NETSTACK_CONF_FRAMER  framer_802154
-#else /* NETSTACK_CONF_WITH_IPV6 */
-#define NETSTACK_CONF_FRAMER  contikimac_framer
-#endif /* NETSTACK_CONF_WITH_IPV6 */
 #endif /* NETSTACK_CONF_FRAMER */
 
 #ifndef CC2420_CONF_AUTOACK
@@ -43,7 +42,7 @@
 #define XMAC_CONF_COMPOWER               1
 #define CXMAC_CONF_COMPOWER              1
 
-#if NETSTACK_CONF_WITH_IPV6
+#if WITH_UIP6
 /* Network setup for IPv6 */
 #define NETSTACK_CONF_NETWORK sicslowpan_driver
 
@@ -52,6 +51,7 @@
    larger than a specified size, if no ContikiMAC header should be
    used. */
 #define SICSLOWPAN_CONF_COMPRESSION_THRESHOLD 63
+#define CONTIKIMAC_CONF_WITH_CONTIKIMAC_HEADER 0
 
 #define CXMAC_CONF_ANNOUNCEMENTS         0
 #define XMAC_CONF_ANNOUNCEMENTS          0
@@ -60,7 +60,7 @@
 #define QUEUEBUF_CONF_NUM                8
 #endif
 
-#else /* NETSTACK_CONF_WITH_IPV6 */
+#else /* WITH_UIP6 */
 
 /* Network setup for non-IPv6 (rime). */
 
@@ -89,7 +89,7 @@
 #define CC2420_CONF_SFD_TIMESTAMPS       1
 #endif /* TIMESYNCH_CONF_ENABLED */
 
-#endif /* NETSTACK_CONF_WITH_IPV6 */
+#endif /* WITH_UIP6 */
 
 #define PACKETBUF_CONF_ATTRS_INLINE 1
 
@@ -100,10 +100,6 @@
 #ifndef CC2420_CONF_CHANNEL
 #define CC2420_CONF_CHANNEL              26
 #endif /* CC2420_CONF_CHANNEL */
-
-#ifndef CC2420_CONF_CCA_THRESH
-#define CC2420_CONF_CCA_THRESH              -45
-#endif /* CC2420_CONF_CCA_THRESH */
 
 #define CONTIKIMAC_CONF_BROADCAST_RATE_LIMIT 0
 
@@ -135,29 +131,31 @@
 #define PROCESS_CONF_STATS 1
 /*#define PROCESS_CONF_FASTPOLL    4*/
 
-#ifdef NETSTACK_CONF_WITH_IPV6
+#ifdef WITH_UIP6
 
-#define LINKADDR_CONF_SIZE              8
+#define RIMEADDR_CONF_SIZE              8
 
 #define UIP_CONF_LL_802154              1
 #define UIP_CONF_LLH_LEN                0
 
 #define UIP_CONF_ROUTER                 1
+#ifndef UIP_CONF_IPV6_RPL
+#define UIP_CONF_IPV6_RPL               1
+#endif /* UIP_CONF_IPV6_RPL */
 
 /* configure number of neighbors and routes */
-#ifndef NBR_TABLE_CONF_MAX_NEIGHBORS
-#define NBR_TABLE_CONF_MAX_NEIGHBORS     20
-#endif /* NBR_TABLE_CONF_MAX_NEIGHBORS */
-#ifndef UIP_CONF_MAX_ROUTES
-#define UIP_CONF_MAX_ROUTES   20
-#endif /* UIP_CONF_MAX_ROUTES */
+#ifndef UIP_CONF_DS6_NBR_NBU
+#define UIP_CONF_DS6_NBR_NBU     20
+#endif /* UIP_CONF_DS6_NBR_NBU */
+#ifndef UIP_CONF_DS6_ROUTE_NBU
+#define UIP_CONF_DS6_ROUTE_NBU   20
+#endif /* UIP_CONF_DS6_ROUTE_NBU */
 
 #define UIP_CONF_ND6_SEND_RA		0
-#define UIP_CONF_ND6_SEND_NA		0
 #define UIP_CONF_ND6_REACHABLE_TIME     600000
 #define UIP_CONF_ND6_RETRANS_TIMER      10000
 
-#define NETSTACK_CONF_WITH_IPV6                   1
+#define UIP_CONF_IPV6                   1
 #ifndef UIP_CONF_IPV6_QUEUE_PKT
 #define UIP_CONF_IPV6_QUEUE_PKT         0
 #endif /* UIP_CONF_IPV6_QUEUE_PKT */
@@ -165,6 +163,7 @@
 #define UIP_CONF_IPV6_REASSEMBLY        0
 #define UIP_CONF_NETIF_MAX_ADDRESSES    3
 #define UIP_CONF_ND6_MAX_PREFIXES       3
+#define UIP_CONF_ND6_MAX_NEIGHBORS      4
 #define UIP_CONF_ND6_MAX_DEFROUTERS     2
 #define UIP_CONF_IP_FORWARD             0
 #ifndef UIP_CONF_BUFFER_SIZE
@@ -184,10 +183,10 @@
 #ifndef SICSLOWPAN_CONF_MAX_MAC_TRANSMISSIONS
 #define SICSLOWPAN_CONF_MAX_MAC_TRANSMISSIONS   5
 #endif /* SICSLOWPAN_CONF_MAX_MAC_TRANSMISSIONS */
-#else /* NETSTACK_CONF_WITH_IPV6 */
+#else /* WITH_UIP6 */
 #define UIP_CONF_IP_FORWARD      1
 #define UIP_CONF_BUFFER_SIZE     108
-#endif /* NETSTACK_CONF_WITH_IPV6 */
+#endif /* WITH_UIP6 */
 
 #define UIP_CONF_ICMP_DEST_UNREACH 1
 
@@ -212,9 +211,7 @@
 
 #define UIP_CONF_TCP_SPLIT       0
 
-#ifndef AES_128_CONF
-#define AES_128_CONF cc2420_aes_128_driver
-#endif /* AES_128_CONF */
+
 
 /* include the project config */
 /* PROJECT_CONF_H might be defined in the project Makefile */
