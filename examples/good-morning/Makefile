@@ -10,7 +10,7 @@ CFLAGS += -DENERGEST_CONF_ON=0
 CFLAGS += -ffunction-sections
 LDFLAGS += -Wl,--gc-sections,--undefined=_reset_vector__,--undefined=InterruptVectors,--undefined=_copy_data_init__,--undefined=_clear_bss_init__,--undefined=_end_of_init__
 
-all: good-morning week pushy pushover pushya rama
+all: good-morning week pushy pushover pushya rama deer hide
 
 # shows compiled assembly code alongside source code
 %.lst: %.c
