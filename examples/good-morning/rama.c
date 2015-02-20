@@ -74,10 +74,9 @@ PROCESS_THREAD(deer_process, ev, data)
 		PROCESS_WAIT_EVENT();
 		if(ev == EDEER) {
 			process_post(&rama_process, EDEER, (int)n);
-			n = n>0 ? n-1 : 0; // TODO: all deer scared away => n = 0
+			n = n>0 ? n-1 : 0;
 			leds_on_deer(n);
 			PRINTF("%d\n", n);
-			// TODO: new deer is born after 6 seconds
 		} else if(etimer_expired(&et)) {
 			n = n<3 ? n+1 : 3;
 			leds_on_deer(n);
