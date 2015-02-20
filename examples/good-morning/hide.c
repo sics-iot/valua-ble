@@ -76,7 +76,7 @@ PROCESS_THREAD(deer_process, ev, data)
 		if(ev == EDEER) {
 			process_post(&rama_process, EDEER, (int)n);
 			n = n>0 ? n-1 : 0;
-			r += n; // remaining deers hide
+			r = n; // remaining deers hide
 			n = 0; // no deer visible
 			leds_on_deer(n);
 			PRINTF("%d\n", n);

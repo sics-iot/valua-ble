@@ -17,9 +17,29 @@ PROCESS(rama_process, "rama");
 PROCESS(deer_process, "deer");
 AUTOSTART_PROCESSES(&rama_process, &deer_process);
 
+static void
+leds_on_deer(int n)
+{
+	switch(n) {
+	case 0:
+		leds_off(LEDS_ALL);
+		break;
+	case 1:
+		leds_on(LEDS_RED);leds_off(LEDS_GREEN);leds_off(LEDS_BLUE);
+		break;
+	case 2:
+		leds_on(LEDS_RED);leds_on(LEDS_GREEN);leds_off(LEDS_BLUE);
+		break;
+	case 3:
+		leds_on(LEDS_ALL);
+		break;
+	default:;
+	}
+}
+
 PROCESS_THREAD(rama_process, ev, data)
 {
-	int n;
+	int n; // No. deers seen
 
 	PROCESS_BEGIN();
 
@@ -41,30 +61,10 @@ PROCESS_THREAD(rama_process, ev, data)
 	PROCESS_END();
 }
 
-static void
-leds_on_deer(int n)
-{
-	switch(n) {
-	case 0:
-		leds_off(LEDS_ALL);
-		break;
-	case 1:
-		leds_on(LEDS_RED);leds_off(LEDS_GREEN);leds_off(LEDS_BLUE);
-		break;
-	case 2:
-		leds_on(LEDS_RED);leds_on(LEDS_GREEN);leds_off(LEDS_BLUE);
-		break;
-	case 3:
-		leds_on(LEDS_ALL);
-		break;
-	default:;
-	}
-}
-
 PROCESS_THREAD(deer_process, ev, data)
 {
 	static struct etimer et;
-	static int n = 0;
+	static int n;  // No. deers
 
 	PROCESS_BEGIN();
 

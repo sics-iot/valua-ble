@@ -22,7 +22,7 @@ PROCESS_THREAD(my_process, ev, data)
 		PROCESS_WAIT_EVENT_UNTIL(
 														 ev == sensors_event &&
 														 data == &button_sensor);
-		leds_toggle(LEDS_BLUE);
+		leds_toggle(LEDS_RED);
 		printf("Ouch, don't push me...");
 
 		/* Wait for time-out */
