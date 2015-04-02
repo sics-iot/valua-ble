@@ -138,6 +138,7 @@ rssi(void)
 static void
 channel_up(void)
 {
+	// TODO: protect radio state before switching, otherwise no RX after switch
 	int chn = cc2420_get_channel();
 	chn = (chn - 11 + 1) % 16 + 11;
 	cc2420_set_channel(chn);
@@ -277,7 +278,7 @@ mac_update(void)
 	unsigned shortaddr;
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	// increment higher byte and clear lower byte, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
-	shortaddr = (shortaddr+(1<<8))%(4<<8) & 0xFF00;
+	shortaddr = (shortaddr+(1<<8))%(8<<8) & 0xFF00;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	printf("16-bit MAC address: 0x%04X\n", shortaddr);
 }
@@ -418,7 +419,7 @@ static const struct command command_table[] =	{
 	{'L', "Show all registers", show_all_registers},
 	{'s', "CC2420 status byte", status},
 	{'b', "Battery level", battery_level},
-	{'N', "Burn noide id", burn_node_id},
+	{'N', "Burn node id", burn_node_id},
 	{'R', "Read TXFIFO", read_tx_fifo},
 	{'W', "Write TXFIFO", write_tx_fifo},
 	{'F', "Read RXFIFO", read_rx_fifo}
