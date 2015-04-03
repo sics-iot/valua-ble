@@ -133,7 +133,7 @@ else
   CFLAGSNO ?= -Wall -g $(CFLAGSWERROR)
   CFLAGS  += $(CFLAGSNO) -O
 
-  CFLAGS += -mmul=g13
+  CFLAGS += -mmul=rl78
   CFLAGS  += -Os -ggdb -ffunction-sections -fdata-sections
   CFLAGS  += -fno-strict-aliasing
 
@@ -141,13 +141,15 @@ else
   CFLAGS  += -fno-builtin
   LDFLAGS += -fno-builtin
 
-  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F100xL.ld -nostartfiles
+# zhitao: use standard system start-up files
+#  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F100xL.ld -nostartfiles
+  LDFLAGS += -Wl,--gc-sections
 
   ASFLAGS += -c
   
   # C runtime assembly:
-  CONTIKI_ASMFILES += crt0.S
-  CONTIKI_OBJECTFILES += $(OBJECTDIR)/crt0.o
+#  CONTIKI_ASMFILES += crt0.S
+#  CONTIKI_OBJECTFILES += $(OBJECTDIR)/crt0.o
 endif
 
 ifdef SERIAL_ID
@@ -157,17 +159,17 @@ endif
 ### CPU-dependent directories
 CONTIKI_CPU_DIRS += .
 CONTIKI_CPU_DIRS += sys
-CONTIKI_CPU_DIRS += adf7023
+#CONTIKI_CPU_DIRS += adf7023
 
 ### CPU-dependent source files
 CONTIKI_SOURCEFILES += uart0.c
 CONTIKI_SOURCEFILES += clock.c
 CONTIKI_SOURCEFILES += write.c
 
-CONTIKI_SOURCEFILES += Communication.c
-CONTIKI_SOURCEFILES += ADF7023.c
+#CONTIKI_SOURCEFILES += Communication.c
+#CONTIKI_SOURCEFILES += ADF7023.c
 CONTIKI_SOURCEFILES += assert.c
-CONTIKI_SOURCEFILES += slip-arch.c
+#CONTIKI_SOURCEFILES += slip-arch.c
 CONTIKI_SOURCEFILES += contiki-uart.c
 CONTIKI_SOURCEFILES += watchdog.c
 
