@@ -141,15 +141,18 @@ else
   CFLAGS  += -fno-builtin
   LDFLAGS += -fno-builtin
 
-# zhitao: use standard system start-up files
+# zhitao: use standard crt0.o
+#  LDFLAGS += -Wl,--gc-sections
+#  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F104xE.ld
+# zhitao: use crt0.S in this dir
 #  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F100xL.ld -nostartfiles
-  LDFLAGS += -Wl,--gc-sections
+  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F104xE.ld -nostartfiles
 
   ASFLAGS += -c
   
   # C runtime assembly:
-#  CONTIKI_ASMFILES += crt0.S
-#  CONTIKI_OBJECTFILES += $(OBJECTDIR)/crt0.o
+  CONTIKI_ASMFILES += crt0.S
+  CONTIKI_OBJECTFILES += $(OBJECTDIR)/crt0.o
 endif
 
 ifdef SERIAL_ID

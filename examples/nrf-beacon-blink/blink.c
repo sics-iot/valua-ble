@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, Swedish Institute of Computer Science.
+ * Copyright (c) 2015, SICS Swedish ICT.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,15 +26,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * This file is part of the Contiki operating system.
+ * This file is NOT part of the Contiki operating system.
  *
  */
 
 /**
  * \file
- *         A very simple Contiki application showing how Contiki programs look
+ *         A very simple Contiki application that blinks a LED
  * \author
- *         Adam Dunkels <adam@sics.se>
+ *         Zhitao He <zhitao@sics.se>
  */
 
 #include "contiki.h"
@@ -48,17 +48,32 @@ AUTOSTART_PROCESSES(&blink_process);
 PROCESS_THREAD(blink_process, ev, data)
 {
 	static struct etimer et;
-
+	
   PROCESS_BEGIN();
 
   printf("Hello, blink\n");
 
-	etimer_set(&et, CLOCK_SECOND);
+	/* TEST: led on for 5 seconds */
+	LED1 = 0;
+	etimer_set(&et, CLOCK_SECOND * 5);
+	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+	LED1 = 1;
+
+	etimer_set(&et, CLOCK_SECOND * 1);
 
 	while(1) {
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		LED1 = ~LED1;
-		etimer_reset(&et);
+		LED1 = 0;
+		etimer_set(&et, CLOCK_SECOND / 2);
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 1;
+		etimer_set(&et, CLOCK_SECOND / 2);
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 0;
+		etimer_set(&et, CLOCK_SECOND / 2);
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 1;
+		etimer_set(&et, CLOCK_SECOND * 2);
 	}
 	  
   PROCESS_END();

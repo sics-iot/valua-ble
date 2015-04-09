@@ -32,19 +32,17 @@
  * \author Ian Martin <martini@redwirellc.com>
  */
 
-#ifndef RL78_H
-#define RL78_H
+#define P21   (P2bits.bit1)
 
-#include <stdint.h>
 
-#include "sfrs.h"
-#include "sfrs-ext.h"
+#ifndef NEWLINE
+#define NEWLINE "\r\n"
+#endif
 
-#define f_CLK         16000000 // 16 MHz.
-#define CLOCK_CHANNEL 0
-#define CLOCK_SCALER  14       // Use f_CLK / 2^14.
+#ifndef BIT
+#define BIT(n) (1 << (n))
+#endif
 
-typedef uint32_t clock_time_t;
-typedef unsigned short uip_stats_t;
+#define BAUD2UBR(x) (x)
 
-#endif // RL78_H
+#define LED1 P21
