@@ -35,6 +35,6 @@
 #ifndef CONTIKI_UART_H
 #define CONTIKI_UART_H
 
-extern int (*uart0_input_handler)(unsigned char c);
+extern int (*uart2_input_handler)(unsigned char c);
 
 #endif

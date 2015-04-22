@@ -32,10 +32,10 @@
  * \author Ian Martin <martini@redwirellc.com>
  */
 
-int (*uart0_input_handler)(unsigned char c) = 0;
+int (*uart2_input_handler)(unsigned char c) = 0;
 
 void
-uart0_set_input(int (*input)(unsigned char c))
+uart2_set_input(int (*input)(unsigned char c))
 {
-  uart0_input_handler = input;
+  uart2_input_handler = input;
 }
