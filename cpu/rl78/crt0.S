@@ -58,8 +58,8 @@ _interrupt_vector_table:
 	IV(st2)
 	IV(sr2)
 	IV(sre2)
-	IV(dma0)
-	IV(dma1)
+	IVx() ;; empty
+	IVx() ;; empty
 	IV(st0)
 	IV(sr0)
 	IV(tm01h)
@@ -79,12 +79,12 @@ _interrupt_vector_table:
 	IV(kr)
 	IV(st3)
 	IV(sr3)
-	IV(tm13)
-	IV(tm04)
+	IV(trj0) ;; 0x40
+	IV(tm10) ;; 0x42
 
-	IV(tm05)
-	IV(tm06)
-	IV(tm07)
+	IV(tm11) ;; 0x44
+	IV(tm12)
+	IV(tm13)
 	IV(p6)
 	IV(p7)
 	IV(p8)
@@ -92,29 +92,29 @@ _interrupt_vector_table:
 	IV(p10)
 
 	IV(p11)
-	IV(tm10)
-	IV(tm12)
-	IV(sre3)
-	IV(tm13h)
-	IV(md)
+	IV(trd0) ;; 0x56
+	IV(trd1) ;; 0x58
+	IV(trg) ;; 0x5a
+	IV(tm13h) ;; 0x5c
+	IVx() ;; 0x5e
 	IV(iica1)
 	IV(fl)
 
-	IV(dma2)
-	IV(dma3)
-	IV(tm14)
-	IV(tm15)
-	IV(tm16)
-	IV(tm17)
+	IVx() ;; 0x64
 	IVx()
 	IVx()
-
 	IVx()
 	IVx()
 	IVx()
 	IVx()
 	IVx()
-	IV(brk)
+
+	IVx() ;; 0x74
+	IVx()
+	IVx()
+	IVx()
+	IVx()
+	IV(brk) ;; 0x7e
 	/* Note: 126 vectors */
 
 	.section ".csstart", "ax"
@@ -128,7 +128,10 @@ __csstart:
 	.weak	__rl78_option_byte_3
 __rl78_option_byte_0 = 0x6e
 __rl78_option_byte_1 = 0xff
-__rl78_option_byte_2 = 0xe8
+/* Option byte 2: clock freq. setting := CMODE1 CMODE0 #1b FRQSEL4 | FRQSEL3 FRQSEL2 FRQSEL1 FRQSEL0 */
+__rl78_option_byte_2 = 0xe8 ;; 32 MHz
+;; __rl78_option_byte_2 = 0xe9 ;; 16 MHz
+;;__rl78_option_byte_2 = 0xaa ;; 8 MHz
 __rl78_option_byte_3 = 0x85
 
 	.section ".opt", "a"
@@ -221,7 +224,7 @@ _start:
 	call	!!__mcleanup
 #endif
 
-	call	!!_exit
+;;	call	!!_exit ;; skip _exit to save a few hundred bytes of code
 
 	.size	_start, . - _start
 
