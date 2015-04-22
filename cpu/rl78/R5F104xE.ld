@@ -37,7 +37,7 @@ ENTRY(_start)
 /* Do we need any of these for elf?
    __DYNAMIC = 0;    */
 
-/* This is for an R5F104xE/G14, 64k flash, 5.5k ram, 4k data flash */
+/* This is for an R5F104xE/G14, 64k flash, 5.5k ram */
 MEMORY {
 	VEC (r)   : ORIGIN = 0x00000, LENGTH = 0x00002
 	IVEC (r)  : ORIGIN = 0x00004, LENGTH = 0x0007c
