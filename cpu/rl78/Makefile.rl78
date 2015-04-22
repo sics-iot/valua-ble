@@ -134,8 +134,20 @@ else
   CFLAGS  += $(CFLAGSNO) -O
 
   CFLAGS += -mmul=rl78
-  CFLAGS  += -Os -ggdb -ffunction-sections -fdata-sections
-  CFLAGS  += -fno-strict-aliasing
+#  CFLAGS  += -Os -ggdb -ffunction-sections -fdata-sections
+  # zhitao: size optimization options suggested by KPIT
+#  CFLAGS  += -Os -ggdb -ffunction-sections -fdata-sections
+#  CFLAGS  += -Os -mrelax -ffunction-sections -fdata-sections # mrelax is code size saving
+ CFLAGS += -O0 -mrelax -fno-cse-follow-jumps -fno-caller-saves -fno-tree-loop-optimize -fdata-sections -ffunction-sections
+  # the following flags don't seem to reduce code size
+  CFLAGS += -fomit-frame-pointer
+  CFLAGS += -fno-function-cse
+  CFLAGS += -funit-at-a-time
+  CFLAGS += -falign-jumps
+  CFLAGS += -fno-strict-aliasing
+  CFLAGS += -flto
+  # NOTE: the following seems to increase code size instead
+#  CFLAGS += -fpack-struct
 
   # Enable override of write() function:
   CFLAGS  += -fno-builtin
@@ -145,8 +157,12 @@ else
 #  LDFLAGS += -Wl,--gc-sections
 #  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F104xE.ld
 # zhitao: use crt0.S in this dir
-#  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F100xL.ld -nostartfiles
-  LDFLAGS += -Wl,--gc-sections -T $(CONTIKI_CPU)/R5F104xE.ld -nostartfiles
+  LDFLAGS += -Wl,--gc-sections -flto -T $(CONTIKI_CPU)/R5F104xE.ld -nostartfiles
+  # zhitao: TEST use liboptc
+# LDFLAGS += -L/home/zhitao/gnurl78_v15.01_elf-1/rl78-elf/lib
+#  LDFLAGS += -L/home/zhitao/Downloads/liboptc/O3/
+# LDFLAGS += -loptc
+#  LDFLAGS += --verbose 
 
   ASFLAGS += -c
   
@@ -165,7 +181,8 @@ CONTIKI_CPU_DIRS += sys
 #CONTIKI_CPU_DIRS += adf7023
 
 ### CPU-dependent source files
-CONTIKI_SOURCEFILES += uart0.c
+# CONTIKI_SOURCEFILES += uart0.c
+CONTIKI_SOURCEFILES += uart2.c
 CONTIKI_SOURCEFILES += clock.c
 CONTIKI_SOURCEFILES += write.c
 
