@@ -48,14 +48,16 @@ AUTOSTART_PROCESSES(&blink_process);
 PROCESS_THREAD(blink_process, ev, data)
 {
 	static struct etimer et;
+	static int n;
 	
   PROCESS_BEGIN();
 
-  printf("Hello, blink\n");
+	/* iprintf works the same way as printf, except ignoring floating point %f %g etc. */
+  iprintf("Hello, blink\n");
 
-	/* TEST: led on for 5 seconds */
+	/* TEST: led on for 3 seconds */
 	LED1 = 0;
-	etimer_set(&et, CLOCK_SECOND * 5);
+	etimer_set(&et, CLOCK_SECOND * 3);
 	PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 	LED1 = 1;
 
@@ -64,16 +66,17 @@ PROCESS_THREAD(blink_process, ev, data)
 	while(1) {
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		LED1 = 0;
-		etimer_set(&et, CLOCK_SECOND / 2);
+		etimer_set(&et, CLOCK_SECOND / 4);
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		LED1 = 1;
-		etimer_set(&et, CLOCK_SECOND / 2);
+		etimer_set(&et, CLOCK_SECOND / 4);
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		LED1 = 0;
-		etimer_set(&et, CLOCK_SECOND / 2);
+		etimer_set(&et, CLOCK_SECOND / 4);
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		LED1 = 1;
-		etimer_set(&et, CLOCK_SECOND * 2);
+		iprintf("tick %d\n", n++);
+		etimer_set(&et, CLOCK_SECOND / 4 * 5);
 	}
 	  
   PROCESS_END();
