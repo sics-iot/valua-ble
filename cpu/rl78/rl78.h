@@ -40,9 +40,9 @@
 #include "sfrs.h"
 #include "sfrs-ext.h"
 
-#define f_CLK         16000000 // 16 MHz.
+#define f_CLK         32000000 // 16 MHz.
 #define CLOCK_CHANNEL 0
-#define CLOCK_SCALER  14       // Use f_CLK / 2^14.
+#define CLOCK_SCALER  15       // Use f_CLK / 2^14.
 
 typedef uint32_t clock_time_t;
 typedef unsigned short uip_stats_t;
