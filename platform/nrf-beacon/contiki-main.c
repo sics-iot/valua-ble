@@ -49,13 +49,14 @@
 #include "net/ipv6/uip-ds6.h"
 #endif /* NETSTACK_CONF_WITH_IPV6 */
 
-#include "uart0.h"
+#include "uart2.h"
 #include "contiki-uart.h"
 #include "watchdog.h"
 #include "slip-arch.h"
 
 #if __GNUC__
 #include "write.h"
+#pragma GCC optimize ("Os")
 #endif
 
 SENSORS(&button_sensor);
@@ -66,15 +67,18 @@ static uint16_t node_id = 0x0102;
 int contiki_argc = 0;
 char **contiki_argv;
 
-static void
+static void __attribute__ ((noinline))
 delay_1sec(void)
 {
   /* Delay 1 second */
   register unsigned long int i;
   for(i = 0x000FFFFFUL; i; --i) {
-    asm ("nop");
+//  for(i = 0x0003FFFFUL; i; --i) {
+  /* asm ("nop"); */
+	asm volatile("");
   }
 }
+
 int
 main(int argc, char **argv)
 {
@@ -89,7 +93,14 @@ main(int argc, char **argv)
 //  OSMC = 0x00;                                       /* Supply fsub to peripherals, including Interval Timer */
   OSMC= 0x10U;
 
-  uart0_init();
+  uart2_init();
+  asm ("ei");                                             /* Enable interrupts */
+
+	/* TEST uart2 output */
+	uart2_putchar('H');
+	uart2_putchar('i');
+	uart2_putchar('!');
+	uart2_putchar('\n');
 
 #if __GNUC__
   /* Force linking of custom write() function: */
@@ -97,14 +108,14 @@ main(int argc, char **argv)
 #endif
 
   /* Setup 12-bit interval timer */
-  RTCEN = 1;                                              /* Enable 12-bit interval timer and RTC */
-  ITMK = 1;                                               /* Disable IT interrupt */
-  ITPR0 = 0;                                              /* Set interrupt priority - highest */
-  ITPR1 = 0;
-  ITMC = 0x8FFFU;                                    /* Set maximum period 4096/32768Hz = 1/8 s, and start timer */
-  ITIF = 0;                                               /* Clear interrupt request flag */
-  ITMK = 0;                                               /* Enable IT interrupt */
-  /* asm ("ei");                                             / * Enable interrupts * / */
+  /* RTCEN = 1;                                              /\* Enable 12-bit interval timer and RTC *\/ */
+  /* ITMK = 1;                                               /\* Disable IT interrupt *\/ */
+  /* ITPR0 = 0;                                              /\* Set interrupt priority - highest *\/ */
+  /* ITPR1 = 0; */
+  /* ITMC = 0x8FFFU;                                    /\* Set maximum period 4096/32768Hz = 1/8 s, and start timer *\/ */
+  /* ITIF = 0;                                               /\* Clear interrupt request flag *\/ */
+  /* ITMK = 0;                                               /\* Enable IT interrupt *\/ */
+  /* asm ("ei");                                             /\* Enable interrupts *\/ */
 
   /* Disable analog inputs because they can conflict with the SPI buses: */
   ADPC = 0x01;  /* Configure all analog pins as digital I/O. */
@@ -116,22 +127,16 @@ main(int argc, char **argv)
 //  PM5 |= BIT(5) | BIT(4) | BIT(3) | BIT(2) | BIT(1); /* Set pins as inputs. */
 //  PU5 |= BIT(5) | BIT(4) | BIT(3) | BIT(2) | BIT(1); /* Enable internal pull-up resistors. */
 
-  /* Initialize LED outputs: */
+  /* Initialize LED output: */
 #define BIT(n) (1 << (n))
   PM2 &= ~BIT(1); /* LED1 */
-//  delay_1sec();
-//  delay_1sec();
   int i;
   for (i=0;i<3;i++) {
-  LED1 = 0; // TEST: blink led
-  delay_1sec();
-  LED1 = 1;
-  delay_1sec();
+		LED1 = 0; // led on
+		delay_1sec();
+		LED1 = 1; // led off
+		delay_1sec();
   }
-//  delay_1sec();
-//  LED1 = 0; // TEST: blink led
-//  delay_1sec();
-//  LED1 = 1;
 
   /* crappy way of remembering and accessing argc/v */
   contiki_argc = argc;
@@ -139,42 +144,35 @@ main(int argc, char **argv)
 
   process_init();
   process_start(&etimer_process, NULL);
+
   ctimer_init();
 
   serial_line_init();
 
   autostart_start(autostart_processes);
 
-  printf("node_id = %hu\n", node_id);
+  iprintf("node_id = %hu\n", node_id);
 
   while(1) {
-    watchdog_periodic();
+    /* watchdog_periodic(); */
 
-    while(uart0_can_getchar()) {
-      char c;
-      c = uart0_getchar();
-      if(uart0_input_handler) {
-        uart0_input_handler(c);
-      }
-    }
+    /* while(uart2_can_getchar()) { */
+    /*   char c; */
+    /*   c = uart2_getchar(); */
+    /*   if(uart2_input_handler) { */
+    /*     uart2_input_handler(c); */
+    /*   } */
+    /* } */
 
-    process_run();
+    int r;
+    do {
+      /* Reset watchdog. */
+      watchdog_periodic();
+      r = process_run();
+    } while(r > 0);
 
+		/* asm ("halt"); */
     etimer_request_poll();
+		/* uart2_putchar('.'); */
   }
-
-  return 0;
 }
-/*---------------------------------------------------------------------------*/
-void
-log_message(char *m1, char *m2)
-{
-  printf("%s%s" NEWLINE, m1, m2);
-}
-/*---------------------------------------------------------------------------*/
-void
-uip_log(char *m)
-{
-  printf("%s" NEWLINE, m);
-}
-/*---------------------------------------------------------------------------*/
