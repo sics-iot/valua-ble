@@ -879,25 +879,25 @@ struct KRMstruct {
 };
 
 struct EGP0struct {
-  unsigned char bit0      : 1;
-  unsigned char bit1      : 1;
-  unsigned char bit2      : 1;
-  unsigned char bit3      : 1;
-  unsigned char bit4      : 1;
-  unsigned char bit5      : 1;
-  unsigned char bit6      : 1;
-  unsigned char bit7      : 1;
+  unsigned char egp0      : 1;
+  unsigned char egp1      : 1;
+  unsigned char egp2      : 1;
+  unsigned char egp3      : 1;
+  unsigned char egp4      : 1;
+  unsigned char egp5      : 1;
+  unsigned char egp6      : 1;
+  unsigned char egp7      : 1;
 };
 
 struct EGN0struct {
-  unsigned char bit0      : 1;
-  unsigned char bit1      : 1;
-  unsigned char bit2      : 1;
-  unsigned char bit3      : 1;
-  unsigned char bit4      : 1;
-  unsigned char bit5      : 1;
-  unsigned char bit6      : 1;
-  unsigned char bit7      : 1;
+  unsigned char egn0      : 1;
+  unsigned char egn1      : 1;
+  unsigned char egn2      : 1;
+  unsigned char egn3      : 1;
+  unsigned char egn4      : 1;
+  unsigned char egn5      : 1;
+  unsigned char egn6      : 1;
+  unsigned char egn7      : 1;
 };
 
 struct EGP1struct {
@@ -3277,5 +3277,8 @@ struct PMCstruct {
 #define TMPR113   (PR11Hbits.tmpr113)
 #define TMPR104   (PR11Hbits.tmpr104)
 #define MAA       (PMCbits.maa)
-
+#define EGP3      (EGP0bits.egp3)
+#define EGN3      (EGN0bits.egn3)
+#define EGP4      (EGP0bits.egp4)
+#define EGN4      (EGN0bits.egn4)
 #endif /* SFRS_H */
