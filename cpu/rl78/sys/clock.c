@@ -32,95 +32,96 @@
  * \author Ian Martin <martini@redwirellc.com>
  */
 
-#include <time.h>
+/* #include <time.h> */
 
 #include "contiki.h"
+#include "platform-conf.h"
 
 #ifndef BIT
 #define BIT(n) (1 << (n))
 #endif
 
+#define CLOCK_CHANNEL 0
+
+#define CLOCK_SCALER LOG2((f_CLK / f_SYS))
+#define TIMER00_CLK_FREQ (f_CLK >> CLOCK_SCALER)
+
+#define INTERVAL (TIMER00_CLK_FREQ / CLOCK_CONF_SECOND)
+
+#define MAX_TICKS (~((clock_time_t)0) / 2)
+
 #define clock() (0xffff - TCR[CLOCK_CHANNEL])
+
+static volatile unsigned long seconds = 0;
+static volatile clock_time_t count = 0;
+unsigned long et_process_polled;
 
 void
 clock_init(void)
 {
-#if (CLOCK_CHANNEL <= 7)
-  TAU0EN = 1; /* Enable Timer Array Unit 0. */
-  TT0 = 0x00ff; /* Stop the Timer Array Unit. */
-  TPS0 = (TPS0 & 0xfff0) | CLOCK_SCALER;
-  TMR[CLOCK_CHANNEL] = 0x0000; /* default value */
+	/* Enable Timer Array Unit 0. */
+	TAU0EN = 1;
+	/* Supply clock frm CK00 */
+	TPS0 = (TPS0 & 0xFFF0) | CLOCK_SCALER;
+	/* Stop all channels (4*16bit + 2*8bit: 0,1,2,3,H1,H3 */
+	TT0 = 0x0A0F;
+	/* Mask channel interrupt */
+	TMMK00 = 1;
 
-#if (CLOCK_CHANNEL == 0)
-  TDR00 = 0xffff;
-#elif (CLOCK_CHANNEL == 1)
-  TDR01 = 0xffff;
-#elif (CLOCK_CHANNEL == 2)
-  TDR02 = 0xffff;
-#elif (CLOCK_CHANNEL == 3)
-  TDR03 = 0xffff;
-#elif (CLOCK_CHANNEL == 4)
-  TDR04 = 0xffff;
-#elif (CLOCK_CHANNEL == 5)
-  TDR05 = 0xffff;
-#elif (CLOCK_CHANNEL == 6)
-  TDR06 = 0xffff;
-#elif (CLOCK_CHANNEL == 7)
-  TDR07 = 0xffff;
-#else
-#error Invalid CLOCK_CHANNEL
-#endif
+	/* Timer mode: CKS0, interval timer */
+	TMR[CLOCK_CHANNEL] = 0x0000;
 
-  TE0 |= BIT(CLOCK_CHANNEL); /* Start timer channel 0. */
-  TS0 |= BIT(CLOCK_CHANNEL); /* Start counting. */
-#else
-  TAU1EN = 1; /* Enable Timer Array Unit 1. */
-  TT1 = 0x00ff; /* Stop the Timer Array Unit. */
-  TPS1 = (TPS1 & 0xfff0) | CLOCK_SCALER;
-  TMR[CLOCK_CHANNEL] = 0x0000; /* default value */
+	/* Interval period = tick period * (TDRmn + 1)*/
+	TDR00 = INTERVAL - 1;
 
-#if (CLOCK_CHANNEL == 8)
-  TDR00 = 0xffff;
-#elif (CLOCK_CHANNEL == 9)
-  TDR01 = 0xffff;
-#elif (CLOCK_CHANNEL == 10)
-  TDR02 = 0xffff;
-#elif (CLOCK_CHANNEL == 11)
-  TDR03 = 0xffff;
-#elif (CLOCK_CHANNEL == 12)
-  TDR04 = 0xffff;
-#elif (CLOCK_CHANNEL == 13)
-  TDR05 = 0xffff;
-#elif (CLOCK_CHANNEL == 14)
-  TDR06 = 0xffff;
-#elif (CLOCK_CHANNEL == 15)
-  TDR07 = 0xffff;
-#else
-#error Invalid CLOCK_CHANNEL
-#endif
+	/* Enable channel interrupt */
+	TMIF00 = 0;
+	TMMK00 = 0;
 
-  TE1 |= BIT(CLOCK_CHANNEL); /* Start timer channel. */
-  TS1 |= BIT(CLOCK_CHANNEL); /* Start counting. */
-#endif
+	/* Start counting */
+	TS0 |= BIT(CLOCK_CHANNEL);
 }
 /*---------------------------------------------------------------------------*/
 clock_time_t
 clock_time(void)
 {
-  return clock();
+  clock_time_t t1, t2;
+  do {
+    t1 = count;
+    t2 = count;
+  } while(t1 != t2);
+  return t1;
 }
 /*---------------------------------------------------------------------------*/
 unsigned long
 clock_seconds(void)
 {
-  return clock() / CLOCK_CONF_SECOND;
+	/* return clock() / CLOCK_CONF_SECOND; */
+	return seconds;
 }
 /*---------------------------------------------------------------------------*/
 
 void
 clock_wait(clock_time_t t)
 {
-  clock_time_t t0;
-  t0 = clock();
-  while(clock() - t0 < t) ;
+	clock_time_t t0;
+	t0 = clock();
+	while(clock() - t0 < t);
+}
+
+/* System tick ISR */
+void __attribute__ ((interrupt))
+tm00_handler(void)
+{
+	// (TCR00 is automatically reloaded with TDR00's value at interrupt)
+	++count;
+
+	if (count % CLOCK_CONF_SECOND == 0) ++seconds;
+
+	/* expiring or expired etimer? => poll etimer process */
+	if(etimer_pending() &&
+	   (etimer_next_expiration_time() - count - 1) > MAX_TICKS) {
+		etimer_request_poll();
+		et_process_polled++;
+	}
 }
