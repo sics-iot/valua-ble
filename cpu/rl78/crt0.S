@@ -30,6 +30,20 @@
 
 #include "rl78-sys.h"
 
+#include "../../platform/nrf-beacon/platform-conf.h"
+
+;; #define f_CLK 16000000UL
+;; #if f_CLK == 32000000UL
+;; #define OPTION_BYTE2 0xe8 // 32 MHz
+;; #elif f_CLK == 16000000UL
+;; #define OPTION_BYTE2 = 0xe9 // 16 MHz
+;; #elif f_CLK == 8000000UL
+;; #define OPTION_BYTE2 = 0xaa // 8 MHz
+;; /* #define CLOCK_SCALER 3 */
+;; #else
+;; #error choose f_CLK = 32/16/8 MHz
+;; #endif
+
 	.section ".vec","a"
 	.short	_start
 
@@ -129,7 +143,8 @@ __csstart:
 __rl78_option_byte_0 = 0x6e
 __rl78_option_byte_1 = 0xff
 /* Option byte 2: clock freq. setting := CMODE1 CMODE0 #1b FRQSEL4 | FRQSEL3 FRQSEL2 FRQSEL1 FRQSEL0 */
-__rl78_option_byte_2 = 0xe8 ;; 32 MHz
+;; __rl78_option_byte_2 = 0xe8 ;; 32 MHz
+__rl78_option_byte_2 = OPTION_BYTE2
 ;; __rl78_option_byte_2 = 0xe9 ;; 16 MHz
 ;;__rl78_option_byte_2 = 0xaa ;; 8 MHz
 __rl78_option_byte_3 = 0x85

@@ -32,7 +32,8 @@
  * \author Maxim Salov <max.salov@gmail.com>, Ian Martin <martini@redwirellc.com>
  */
 
-#include "rl78.h"     /* for f_CLK */
+/* #include "rl78.h"     /\* for f_CLK *\/ */
+#include "platform-conf.h"     /* for f_CLK */
 #include "sfrs.h"
 #include "sfrs-ext.h"
 #include "uart2.h"
@@ -41,14 +42,10 @@
 
 #pragma GCC optimize ("Os")
 
-//#define DESIRED_BAUDRATE 38400
-#define DESIRED_BAUDRATE 115200
-
-/* Note that only 9600, 38400, and 115200 bps were tested. */
-#define PRESCALE_THRESH  ((38400 + 115200) / 2)
-#define PRS_VALUE        ((DESIRED_BAUDRATE < PRESCALE_THRESH) ? 4 : 1)
-#define f_MCK            (f_CLK / (1 << PRS_VALUE))
-#define SDR_VALUE        (f_MCK / DESIRED_BAUDRATE / 2 - 1)
+#define BAUDRATE 115200
+#define f_MCK 4000000UL
+#define PRS_VALUE LOG2((f_CLK / f_MCK))
+#define SDR_VALUE (f_MCK / 2 / BAUDRATE - 1)
 
 #define TXBUFSIZE 128 // size must be power of two
 static struct ringbuf txbuf;
