@@ -32,17 +32,15 @@
 
 #include "../../platform/nrf-beacon/platform-conf.h"
 
-;; #define f_CLK 16000000UL
-;; #if f_CLK == 32000000UL
-;; #define OPTION_BYTE2 0xe8 // 32 MHz
-;; #elif f_CLK == 16000000UL
-;; #define OPTION_BYTE2 = 0xe9 // 16 MHz
-;; #elif f_CLK == 8000000UL
-;; #define OPTION_BYTE2 = 0xaa // 8 MHz
-;; /* #define CLOCK_SCALER 3 */
-;; #else
-;; #error choose f_CLK = 32/16/8 MHz
-;; #endif
+#if f_CLK == 32000000UL
+#define OPTION_BYTE2 0xe8 // 32 MHz
+#elif f_CLK == 16000000UL
+#define OPTION_BYTE2 = 0xe9 // 16 MHz
+#elif f_CLK == 8000000UL
+#define OPTION_BYTE2 = 0xaa // 8 MHz
+#else
+#error choose f_CLK = 32/16/8 MHz
+#endif
 
 	.section ".vec","a"
 	.short	_start

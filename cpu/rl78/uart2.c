@@ -32,7 +32,6 @@
  * \author Maxim Salov <max.salov@gmail.com>, Ian Martin <martini@redwirellc.com>
  */
 
-/* #include "rl78.h"     /\* for f_CLK *\/ */
 #include "platform-conf.h"     /* for f_CLK */
 #include "sfrs.h"
 #include "sfrs-ext.h"
@@ -41,6 +40,14 @@
 #include "lib/ringbuf.h"
 
 #pragma GCC optimize ("Os")
+
+#define NBITS2(n) ((n&2)?1:0)
+#define NBITS4(n) ((n&(0xC))?(2+NBITS2(n>>2)):(NBITS2(n)))
+#define NBITS8(n) ((n&0xF0)?(4+NBITS4(n>>4)):(NBITS4(n)))
+#define NBITS16(n) ((n&0xFF00)?(8+NBITS8(n>>8)):(NBITS8(n)))
+#define NBITS32(n) ((n&0xFFFF0000)?(16+NBITS16(n>>16)):(NBITS16(n)))
+#define NBITS(n) (n==0?0:NBITS32(n)+1)
+#define LOG2(n) (NBITS(n) - 1)
 
 #define BAUDRATE 115200
 #define f_MCK 4000000UL

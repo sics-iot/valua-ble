@@ -41,7 +41,6 @@
 #include "platform-conf.h"
 
 /* Clock ticks per second */
-/* #define CLOCK_CONF_SECOND (f_CLK >> CLOCK_SCALER) */
 #define CLOCK_CONF_SECOND 1000
 
 #define CCIF

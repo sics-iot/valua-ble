@@ -36,6 +36,8 @@
 
 #define P21   (P2bits.bit1)
 #define P31   (P3bits.bit1)
+#define LED1 P21
+#define BUTTON P31
 
 #ifndef NEWLINE
 #define NEWLINE "\r\n"
@@ -47,29 +49,9 @@
 
 #define BAUD2UBR(x) (x)
 
-#define LED1 P21
-#define BUTTON P31
-
-#define NBITS2(n) ((n&2)?1:0)
-#define NBITS4(n) ((n&(0xC))?(2+NBITS2(n>>2)):(NBITS2(n)))
-#define NBITS8(n) ((n&0xF0)?(4+NBITS4(n>>4)):(NBITS4(n)))
-#define NBITS16(n) ((n&0xFF00)?(8+NBITS8(n>>8)):(NBITS8(n)))
-#define NBITS32(n) ((n&0xFFFF0000)?(16+NBITS16(n>>16)):(NBITS16(n)))
-#define NBITS(n) (n==0?0:NBITS32(n)+1)
-#define LOG2(n) (NBITS(n) - 1)
-
-#define f_CLK 8000000UL
-
-#if f_CLK == 32000000UL
-#define OPTION_BYTE2 0xe8 // 32 MHz
-#elif f_CLK == 16000000UL
-#define OPTION_BYTE2 = 0xe9 // 16 MHz
-#elif f_CLK == 8000000UL
-#define OPTION_BYTE2 = 0xaa // 8 MHz
-#else
-#error choose f_CLK = 32/16/8 MHz
-#endif
-
-#define f_SYS 1000000UL
+/* Supported CPU clock frequency: 8/16/32 MHz */
+#define f_CLK 16000000UL
+/* Timer tick frequency */
+#define f_TMR 1000000UL
 
 #endif /* __PLATFORM_CONF__ */

@@ -72,7 +72,8 @@ delay_1sec(void)
 {
 	/* Delay 1 second */
 	register unsigned long int i;
-	for(i = 0x000FFFFFUL; i; --i) {
+	/* for(i = 0x000FFFFFUL; i; --i) { */
+	for(i = 0x000FFFFFUL / (32000000UL / f_CLK); i; --i) {
 		//  for(i = 0x0003FFFFUL; i; --i) {
 		/* asm ("nop"); */
 		asm volatile("");
@@ -153,6 +154,7 @@ main(int argc, char **argv)
 	autostart_start(autostart_processes);
 
 	iprintf("node_id = %hu\n", node_id);
+	iprintf("CPU frequency = %lu\n", f_CLK);
 
 	while(1) {
 		/* watchdog_periodic(); */
