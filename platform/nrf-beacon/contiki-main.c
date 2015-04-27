@@ -67,18 +67,15 @@ static uint16_t node_id = 0x0102;
 int contiki_argc = 0;
 char **contiki_argv;
 
-static void __attribute__ ((noinline))
-delay_1sec(void)
-{
-	/* Delay 1 second */
-	register unsigned long int i;
-	/* for(i = 0x000FFFFFUL; i; --i) { */
-	for(i = 0x000FFFFFUL / (32000000UL / f_CLK); i; --i) {
-		//  for(i = 0x0003FFFFUL; i; --i) {
-		/* asm ("nop"); */
-		asm volatile("");
-	}
-}
+/* static void __attribute__ ((noinline)) */
+/* delay_1sec(void) */
+/* { */
+/* 	/\* Delay 1 second *\/ */
+/* 	register unsigned long int i; */
+/* 	for(i = 0x000FFFFFUL / (32000000UL / f_CLK); i; --i) { */
+/* 		asm volatile(""); */
+/* 	} */
+/* } */
 
 int
 main(int argc, char **argv)
@@ -90,7 +87,7 @@ main(int argc, char **argv)
 	MSTOP = 1U;			/* Stop X1 */
 	//  CKC = 0x00U;
 	MCM0 = 0U;
-	delay_1sec();
+	clock_wait(CLOCK_SECOND / 4);
 	//  OSMC = 0x00;                                       /* Supply fsub to peripherals, including Interval Timer */
 	OSMC= 0x10U;
 
@@ -134,9 +131,11 @@ main(int argc, char **argv)
 	int i;
 	for (i=0;i<3;i++) {
 		LED1 = 0; // led on
-		delay_1sec();
+		/* delay_1sec(); */
+		clock_wait(CLOCK_SECOND);
 		LED1 = 1; // led off
-		delay_1sec();
+		/* delay_1sec(); */
+		clock_wait(CLOCK_SECOND);
 	}
 
 	/* crappy way of remembering and accessing argc/v */

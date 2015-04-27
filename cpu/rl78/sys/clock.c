@@ -108,13 +108,20 @@ clock_seconds(void)
 	return seconds;
 }
 /*---------------------------------------------------------------------------*/
-
 void
 clock_wait(clock_time_t t)
 {
-	clock_time_t t0;
-	t0 = clock();
-	while(clock() - t0 < t);
+	clock_time_t t0 = count;
+	while(count - t0 < t);
+}
+/*---------------------------------------------------------------------------*/
+void
+clock_delay_usec(uint16_t dt)
+{
+	register uint16_t i;
+	for(i = dt / (32000000UL / f_CLK); i; --i) {
+		asm volatile("");
+	}
 }
 
 /* System tick ISR */
