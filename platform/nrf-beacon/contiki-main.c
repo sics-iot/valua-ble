@@ -87,7 +87,7 @@ main(int argc, char **argv)
 	MSTOP = 1U;			/* Stop X1 */
 	//  CKC = 0x00U;
 	MCM0 = 0U;
-	clock_wait(CLOCK_SECOND / 4);
+	clock_delay_usec(~0); // max value 65535
 	//  OSMC = 0x00;                                       /* Supply fsub to peripherals, including Interval Timer */
 	OSMC= 0x10U;
 
