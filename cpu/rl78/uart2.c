@@ -32,11 +32,11 @@
  * \author Maxim Salov <max.salov@gmail.com>, Ian Martin <martini@redwirellc.com>
  */
 
+#include "uart2.h"
+#include "string.h" // for NULL
 #include "platform-conf.h"     /* for f_CLK */
 #include "sfrs.h"
 #include "sfrs-ext.h"
-#include "uart2.h"
-
 #include "lib/ringbuf.h"
 
 #pragma GCC optimize ("Os")
@@ -55,6 +55,9 @@
 #define SDR_VALUE (f_MCK / 2 / BAUDRATE - 1)
 
 #define TXBUFSIZE 128 // size must be power of two
+
+int (*uart2_input_handler)(unsigned char c);
+
 static struct ringbuf txbuf;
 static uint8_t txbuf_data[TXBUFSIZE];
 
@@ -135,6 +138,7 @@ uart2_init(void)
   ringbuf_init(&txbuf, txbuf_data, sizeof(txbuf_data));
   /* STMK2 = 0;                                                /\* ENABLE INTST2 interrupt *\/ */
 	transmitting = 0;
+  SRMK2 = 0;                                                /* Enable INTSR2 interrupt */
 }
 
 void
@@ -155,16 +159,6 @@ uart2_putchar(int c)
   }
 }
 
-char
-uart2_getchar(void)
-{
-  char c;
-  while(!uart2_can_getchar()) ;
-  c = SDR11;
-  SRIF2 = 0;
-  return c;
-}
-
 int
 uart2_puts(const char *s)
 {
@@ -178,6 +172,12 @@ uart2_puts(const char *s)
   return len;
 }
 
+void
+uart2_set_input(int (*input)(unsigned char c))
+{
+  uart2_input_handler = input;
+}
+
 /* UART2 transmission ISR */
 void __attribute__ ((interrupt))
 st2_handler(void)
@@ -188,4 +188,17 @@ st2_handler(void)
   } else {
     TXD2 = ringbuf_get(&txbuf);
   }
+}
+
+/* UART2 reception ISR */
+void __attribute__ ((interrupt))
+sr2_handler(void)
+{
+	/* Data available in register */
+	unsigned char c = SDR11 & 0x00FF;
+	if (uart2_input_handler != NULL) {
+		if (uart2_input_handler(c)) {
+			;} else {;
+		} // RX error
+	}
 }

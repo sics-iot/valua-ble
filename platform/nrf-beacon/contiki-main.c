@@ -148,6 +148,7 @@ main(int argc, char **argv)
 
 	ctimer_init();
 
+	uart2_set_input(serial_line_input_byte);
 	serial_line_init();
 
 	autostart_start(autostart_processes);
@@ -157,14 +158,6 @@ main(int argc, char **argv)
 
 	while(1) {
 		/* watchdog_periodic(); */
-
-		/* while(uart2_can_getchar()) { */
-		/*   char c; */
-		/*   c = uart2_getchar(); */
-		/*   if(uart2_input_handler) { */
-		/*     uart2_input_handler(c); */
-		/*   } */
-		/* } */
 
 		int r;
 		do {

@@ -35,11 +35,11 @@
 #ifndef UART2_H__
 #define UART2_H__
 
+extern int (*uart2_input_handler)(unsigned char c);
+
 void uart2_init(void);
 void uart2_putchar(int c);
-#define uart2_can_getchar() (SRIF2)
-char uart2_getchar(void);
-
 int uart2_puts(const char *s);
+void uart2_set_input(int (*input)(unsigned char c));
 
 #endif /* UART2_H__ */

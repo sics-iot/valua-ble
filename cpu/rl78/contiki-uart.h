@@ -37,4 +37,7 @@
 
 extern int (*uart2_input_handler)(unsigned char c);
 
+void
+uart2_set_input(int (*input)(unsigned char c));
+
 #endif
