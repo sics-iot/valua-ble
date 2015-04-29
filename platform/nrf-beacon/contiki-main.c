@@ -50,7 +50,6 @@
 #endif /* NETSTACK_CONF_WITH_IPV6 */
 
 #include "uart2.h"
-#include "contiki-uart.h"
 #include "watchdog.h"
 #include "slip-arch.h"
 

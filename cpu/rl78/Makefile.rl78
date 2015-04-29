@@ -181,7 +181,6 @@ CONTIKI_CPU_DIRS += sys
 #CONTIKI_CPU_DIRS += adf7023
 
 ### CPU-dependent source files
-# CONTIKI_SOURCEFILES += uart0.c
 CONTIKI_SOURCEFILES += uart2.c
 CONTIKI_SOURCEFILES += clock.c
 CONTIKI_SOURCEFILES += write.c
@@ -190,7 +189,6 @@ CONTIKI_SOURCEFILES += write.c
 #CONTIKI_SOURCEFILES += ADF7023.c
 CONTIKI_SOURCEFILES += assert.c
 #CONTIKI_SOURCEFILES += slip-arch.c
-# CONTIKI_SOURCEFILES += contiki-uart.c
 CONTIKI_SOURCEFILES += watchdog.c
 
 ### Compilation rules
