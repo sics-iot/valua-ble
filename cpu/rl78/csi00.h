@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Analog Devices, Inc.
+ * Copyright (c) 2015, SICS Swedish ICT.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,18 +29,21 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \author Ian Martin <martini@redwirellc.com>
+ * \author Zhitao He <zhitao@sics.se>
  */
 
-#ifndef RL78_H
-#define RL78_H
+#ifndef CSI00_H__
+#define CSI00_H__
 
-#include <stdint.h>
+#include "stdint.h" // for uint8_t, uint16_6
 
-#include "sfrs.h"
-#include "sfrs-ext.h"
+/* extern int (*csi00_input_handler)(unsigned char c); */
 
-typedef uint32_t clock_time_t;
-typedef unsigned short uip_stats_t;
+void csi00_init(void);
+/* void csi00_set_input(int (*input)(unsigned char c)); */
+uint8_t csi00_strobe(uint8_t cmd);
+uint8_t csi00_read(uint8_t addr);
+void csi00_write(uint8_t addr, uint8_t val);
 
-#endif // RL78_H
+
+#endif /* CSI00_H__ */

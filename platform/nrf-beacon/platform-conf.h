@@ -38,6 +38,8 @@
 #define P31   (P3bits.bit1)
 #define LED1 P21
 #define BUTTON P31
+#define CE (P0bits.bit0)
+#define CSN (P0bits.bit1)
 
 #ifndef NEWLINE
 #define NEWLINE "\r\n"

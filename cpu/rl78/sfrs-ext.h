@@ -5287,4 +5287,7 @@ struct CRCDstruct {
 #define TCR (&TCR00)
 #define TMR (&TMR00)
 
+#define TSF00 (SSR00Lbits.bit6)
+#define BFF00 (SSR00Lbits.bit5)
+
 #endif // SFRS_EXT_H

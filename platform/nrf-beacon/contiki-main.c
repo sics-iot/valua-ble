@@ -52,6 +52,7 @@
 #include "uart2.h"
 #include "watchdog.h"
 #include "slip-arch.h"
+#include "csi00.h"
 
 #if __GNUC__
 #include "write.h"
@@ -127,15 +128,15 @@ main(int argc, char **argv)
 	/* Initialize LED output: */
 #define BIT(n) (1 << (n))
 	PM2 &= ~BIT(1); /* LED1 */
-	int i;
-	for (i=0;i<3;i++) {
-		LED1 = 0; // led on
-		/* delay_1sec(); */
-		clock_wait(CLOCK_SECOND);
-		LED1 = 1; // led off
-		/* delay_1sec(); */
-		clock_wait(CLOCK_SECOND);
-	}
+	/* int i; */
+	/* for (i=0;i<3;i++) { */
+	/* 	LED1 = 0; // led on */
+	/* 	/\* delay_1sec(); *\/ */
+	/* 	clock_wait(CLOCK_SECOND); */
+	/* 	LED1 = 1; // led off */
+	/* 	/\* delay_1sec(); *\/ */
+	/* 	clock_wait(CLOCK_SECOND); */
+	/* } */
 
 	/* crappy way of remembering and accessing argc/v */
 	contiki_argc = argc;
@@ -149,11 +150,12 @@ main(int argc, char **argv)
 
 	uart2_set_input(serial_line_input_byte);
 	serial_line_init();
-
-	autostart_start(autostart_processes);
+	csi00_init();
 
 	iprintf("node_id = %hu\n", node_id);
 	iprintf("CPU frequency = %lu\n", f_CLK);
+
+	autostart_start(autostart_processes);
 
 	while(1) {
 		/* watchdog_periodic(); */
