@@ -29,7 +29,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \author Ian Martin <martini@redwirellc.com>
+ * \author Ian Martin <martini@redwirellc.com>, Zhitao He <zhitao@sics.se>
  */
 
 #include "rl78.h"
@@ -39,4 +39,10 @@ void
 watchdog_periodic(void)
 {
   WDTE = 0xAC;
+}
+
+void
+watchdog_reboot(void)
+{
+	WDTE = 0x00; // write any value != 0xAC
 }
