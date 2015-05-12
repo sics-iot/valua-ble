@@ -138,7 +138,10 @@ __csstart:
 	.weak	__rl78_option_byte_1
 	.weak	__rl78_option_byte_2
 	.weak	__rl78_option_byte_3
-__rl78_option_byte_0 = 0x6e
+/* Option byte 0 (watchdog timer setting):
+				WDTINT | WINDOW1 | WINDOW0 | WDTON | WDCS2 | WDCS1 | WDCS0 | WDSTBYON
+*/
+__rl78_option_byte_0 = 0x7e ;; enable watchdog, 4s time-out, 100% window period
 __rl78_option_byte_1 = 0xff
 /* Option byte 2: clock freq. setting := CMODE1 CMODE0 #1b FRQSEL4 | FRQSEL3 FRQSEL2 FRQSEL1 FRQSEL0 */
 ;; __rl78_option_byte_2 = 0xe8 ;; 32 MHz
