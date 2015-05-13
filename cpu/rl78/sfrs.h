@@ -841,7 +841,12 @@ struct PM15struct {
 
 struct ADM0struct {
   unsigned char adce      : 1;
-  unsigned char : 1;
+  unsigned char lv0      : 1;
+  unsigned char lv1      : 1;
+  unsigned char fr0      : 1;
+  unsigned char fr1      : 1;
+  unsigned char fr2      : 1;
+  unsigned char admd      : 1;
   unsigned char adcs      : 1;
 };
 
