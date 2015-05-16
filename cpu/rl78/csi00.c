@@ -42,19 +42,23 @@
 
 #pragma GCC optimize ("Os")
 
-#define NBITS2(n) ((n&2)?1:0)
-#define NBITS4(n) ((n&(0xC))?(2+NBITS2(n>>2)):(NBITS2(n)))
-#define NBITS8(n) ((n&0xF0)?(4+NBITS4(n>>4)):(NBITS4(n)))
+#define NBITS2(n)  ((n&2)?1:0)
+#define NBITS4(n)  ((n&(0xC))?(2+NBITS2(n>>2)):(NBITS2(n)))
+#define NBITS8(n)  ((n&0xF0)?(4+NBITS4(n>>4)):(NBITS4(n)))
 #define NBITS16(n) ((n&0xFF00)?(8+NBITS8(n>>8)):(NBITS8(n)))
 #define NBITS32(n) ((n&0xFFFF0000)?(16+NBITS16(n>>16)):(NBITS16(n)))
-#define NBITS(n) (n==0?0:NBITS32(n)+1)
-#define LOG2(n) (NBITS(n) - 1)
+#define NBITS(n)   (n==0?0:NBITS32(n)+1)
+#define LOG2(n)    (NBITS(n) - 1)
 
 /* Maximum SPI baudrate is f_CLK/2 */
 #define BAUDRATE (f_CLK/2)
 #define f_MCK f_CLK
 #define PRS_VALUE LOG2((f_CLK / f_MCK))
 #define SDR_VALUE (f_MCK / 2 / BAUDRATE - 1)
+
+extern uint8_t *csi00_tx_addr;
+extern uint8_t *csi00_rx_addr;
+extern uint16_t csi00_buf_len;
 
 /* #define TXBUFSIZE 128 // size must be power of two */
 
@@ -119,7 +123,7 @@ csi00_strobe(uint8_t cmd)
 	while(BFF00);
 	// busy wait until port buffer filled with received value
 	while(!BFF00);
-  CSN = 1;
+  	CSN = 1;
 	return SIO00;
 }
 
@@ -136,7 +140,7 @@ csi00_read(uint8_t addr)
 	SIO00 = 0xFE;
 	while(TSF00);
 
-  CSN = 1;
+  	CSN = 1;
 	return SIO00;
 }
 
@@ -153,7 +157,89 @@ csi00_write(uint8_t addr, uint8_t val)
 	SIO00 = val;
 	while(TSF00);
 
-  CSN = 1;
+  	CSN = 1;
+}
+
+/* Function for writing commands to the command reg  */
+/* returns 0 for sucess */
+/*uint8_t csi00_cmd(uint8_t cmd){
+	CSN = 0;
+
+	SIO00 = cmd;
+//	while(TSF00);
+	while(BFF00);
+
+	CSN = 1;
+	return 0;
+}
+*/
+
+/* Function to transfer (transmit or recieve) single or multiple bytes of data over spi */
+/*   Return char
+ *   0            :             SUCESS
+ *   <HEX>        :             Reg OUT
+ */
+uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len){
+	uint8_t dummy_data;
+
+	csi00_tx_addr = tx_buf;
+	csi00_rx_addr = rx_buf;
+	csi00_buf_len = data_len;
+	
+	//debug stmt 
+	#if 1
+	iprintf("0x%20X ; ",*csi00_tx_addr);	
+	#endif
+	
+	if(csi00_tx_addr != 0){
+		SIO00 = *csi00_tx_addr;
+		while(TSF00);
+		csi00_tx_addr++;
+	}else{
+		SIO00 = 0xFF;
+		while(TSF00);
+	}
+	csi00_buf_len--;                       //end of initial data Tx/Rx Routine
+
+	while(csi00_buf_len != 0){
+		//debug stmt 
+		#if 1
+		iprintf("0x%20X ; ",*csi00_tx_addr);	
+		#endif
+		if(csi00_buf_len > 0){
+			if(csi00_rx_addr != 0){
+				*csi00_rx_addr = SIO00;
+				while(TSF00);
+				csi00_rx_addr++;
+			}else{
+				dummy_data = SIO00;
+				while(TSF00);
+			} 				// read useful/dummy data 
+			if(csi00_tx_addr !=0){
+				SIO00 = *csi00_tx_addr;
+				while(TSF00);
+				csi00_tx_addr++;
+			}else{
+				SIO00 = 0xFF;
+				while(TSF00);
+			}
+			csi00_buf_len--;
+		}else if(csi00_buf_len == 0){
+			if(csi00_rx_addr != 0){
+				*csi00_rx_addr = SIO00;
+				while(TSF00);
+				csi00_rx_addr++;
+			}else{
+				dummy_data = SIO00;
+				while(TSF00);
+			}
+		}
+	}
+	//debug stmt 
+	#if 1
+	iprintf("returned ;");	
+	#endif
+	return 0;
 }
 
 /* CSI00 ISR: TX/RX transfer complete */

@@ -37,6 +37,10 @@
 
 #include "stdint.h" // for uint8_t, uint16_6
 
+uint8_t *csi00_tx_addr;
+uint8_t *csi00_rx_addr;
+uint16_t csi00_buf_len;
+
 /* extern int (*csi00_input_handler)(unsigned char c); */
 
 void csi00_init(void);
@@ -44,6 +48,7 @@ void csi00_init(void);
 uint8_t csi00_strobe(uint8_t cmd);
 uint8_t csi00_read(uint8_t addr);
 void csi00_write(uint8_t addr, uint8_t val);
-
+//uint8_t csi00_cmd(uint8_t cmd);
+uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len);
 
 #endif /* CSI00_H__ */
