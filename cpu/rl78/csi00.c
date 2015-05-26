@@ -120,10 +120,12 @@ csi00_strobe(uint8_t cmd)
 	/* // busy wait until communication ends */
 	/* while(TSF00); */
 	// busy wait until port buffer cleared
-	while(BFF00);
+	/* while(BFF00); */
 	// busy wait until port buffer filled with received value
-	while(!BFF00);
-  	CSN = 1;
+	/* while(!BFF00); */
+	while(TSF00);
+	clock_delay_usec(1);
+	CSN = 1;
 	return SIO00;
 }
 
@@ -158,6 +160,51 @@ csi00_write(uint8_t addr, uint8_t val)
 	while(TSF00);
 
   	CSN = 1;
+}
+
+
+uint8_t
+csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len)
+{
+	int i;
+
+	CSN = 0;
+
+	/* write addr byte */
+	SIO00 = addr;
+	while(TSF00);
+
+	for(i = 0;i < len;i++) {
+		/* write dummy byte to read data byte */
+		SIO00 = 0xFD;
+		while(TSF00);
+		clock_delay_usec(1);
+		/* read byte into buffer */
+		buf[i] = SIO00;
+	}
+
+	CSN = 1;
+	return len;
+}
+
+void
+csi00_write_message(uint8_t addr, uint8_t *buf, uint8_t len)
+{
+	int i;
+
+	CSN = 0;
+
+	/* write addr byte */
+	SIO00 = addr;
+	while(TSF00);
+
+	/* write data bytes */
+	for(i = 0;i < len;i++) {
+		SIO00 = buf[i];
+		while(TSF00);
+	}
+
+	CSN = 1;
 }
 
 /* Function for writing commands to the command reg  */
@@ -241,6 +288,7 @@ uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len){
 	#endif
 	return 0;
 }
+
 
 /* CSI00 ISR: TX/RX transfer complete */
 void __attribute__ ((interrupt))
