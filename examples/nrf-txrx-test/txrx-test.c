@@ -120,6 +120,18 @@ PROCESS_THREAD(blink_process, ev, data)
 #define RX_P_NO BV(3)|BV(2)|BV(1)
 #define TX_FULL BV(0)
 
+static uint8_t
+getreg(uint8_t addr)
+{
+	return csi00_read(addr);
+}
+
+static void
+setreg(uint8_t addr, uint8_t val)
+{
+	csi00_write(0x20 | addr, val);
+}
+
 /* modes */
 #define PD 0
 #define RX 1
@@ -141,7 +153,7 @@ struct mode {
 static void
 pd_mode(int new_mode)
 {
-	csi00_write(0x20 | CONFIG,
+	setreg(CONFIG,
 	            (MASK_RX_DR|MASK_TX_DS|MASK_MAX_RT|PRIM_RX)&(~PWR_UP));
 }
 
@@ -149,7 +161,7 @@ static void
 rx_mode(int new_mode)
 {
 	(void)csi00_strobe(FLUSH_RX);
-	csi00_write(0x20 | CONFIG,
+	setreg(CONFIG,
 	            (MASK_TX_DS|MASK_MAX_RT|PWR_UP|PRIM_RX)&(~MASK_RX_DR));
 	CE = 1;
 }
@@ -159,7 +171,7 @@ tx_mode(int new_mode)
 {
 	CE = 0;
 	(void)csi00_strobe(FLUSH_TX);
-	csi00_write(0x20 | CONFIG,
+	setreg(CONFIG,
 	            (MASK_RX_DR|MASK_MAX_RT|PWR_UP)&(~MASK_TX_DS&~PRIM_RX));
 }
 
@@ -196,19 +208,26 @@ start_mode(int new_mode)
 static void
 channel_up(void)
 {
-	uint8_t rf_ch = csi00_read(RF_CH);
+	uint8_t rf_ch = getreg(RF_CH);
 	rf_ch = (rf_ch + 1) % 128;
-	csi00_write(0x20 | RF_CH, rf_ch);
-	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
+	setreg(RF_CH, rf_ch);
+	iprintf("RF channel: %hu\n", getreg(RF_CH));
 }
 /*---------------------------------------------------------------------------*/
 static void
 channel_down(void)
 {
-	uint8_t rf_ch = csi00_read(RF_CH);
+	uint8_t rf_ch = getreg(RF_CH);
 	rf_ch = (rf_ch - 1) % 128;
-	csi00_write(0x20 | RF_CH, rf_ch);
-	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
+	setreg(RF_CH, rf_ch);
+	iprintf("RF channel: %hu\n", getreg(RF_CH));
+}
+
+/*---------------------------------------------------------------------------*/
+static void
+status(void)
+{
+	iprintf("nRF status: 0x%02X\n", getreg(STATUS));
 }
 
 static const struct command command_table[] =	{
@@ -222,14 +241,9 @@ static const struct command command_table[] =	{
 	{'-', "Channel-", channel_down},
 	/* {'v', "Successful pkt receptions", view_rx_statistics}, */
 	/* {'V', "Unsuccessful pkt receptions", view_failed_rx_statistics}, */
-	/* {'H', "Enter HSSD mode", debug_hssd}, */
-	/* {'A', "Enable analog test mode", debug_analog}, */
-	/* {'S', "Alter sync word", alter_syncword}, */
 	/* {'M', "MAC address update", mac_update}, */
 	/* {'L', "Show all registers", show_all_registers}, */
-	/* {'s', "CC2420 status byte", status}, */
-	/* {'b', "Battery level", battery_level}, */
-	/* {'N', "Burn node id", burn_node_id}, */
+	{'s', "nRF status byte", status},
 	/* {'R', "Read TXFIFO", read_tx_fifo}, */
 	/* {'W', "Write TXFIFO", write_tx_fifo}, */
 	/* {'F', "Read RXFIFO", read_rx_fifo} */
@@ -288,9 +302,9 @@ PROCESS_THREAD(txrx_process, ev, data)
 	// no need to set port direction as P137 is input-only
 
 	/* Enable all three features: dynamic payload length, payload with ack, w_tx_payload_noack command */
-	csi00_write(0x20 | FEATURE, 0x07);
+	setreg(FEATURE, 0x07);
 	/* Enable dynamic pl length in data pipe 0 */
-	csi00_write(0x20 | DYNPD, 0x01);
+	setreg(DYNPD, 0x01);
 
 	/* Set addresses */
 	int i;
@@ -311,8 +325,8 @@ PROCESS_THREAD(txrx_process, ev, data)
 	iprintf("\n");
 
 	/* Set RF channel */
-	csi00_write(0x20 | RF_CH, 63);
-	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
+	setreg(RF_CH, 63);
+	iprintf("RF channel: %hu\n", getreg(RF_CH));
 
 	/* Set radio mode  */
 	start_mode(PD);
@@ -337,7 +351,7 @@ PROCESS_THREAD(txrx_process, ev, data)
 		} else if (ev == serial_line_event_message) {
 			do_command((char *)data);
 		} else if (ev == PROCESS_EVENT_POLL) {
-			uint8_t payload_len = csi00_read(R_RX_PL_WID);
+			uint8_t payload_len = getreg(R_RX_PL_WID);
 			(void)csi00_read_message(R_RX_PAYLOAD, rx_buf, payload_len);
 			iprintf("received (%hu): 0x", payload_len);
 			for(i = 0;i < payload_len;i++) {
@@ -368,17 +382,17 @@ void __attribute__ ((interrupt))
 p0_handler(void)
 {
 	PMK0 = 1;
-	uint8_t status = csi00_read(STATUS);
+	uint8_t status = getreg(STATUS);
 	// write '1' to clear bit
 	if (status & TX_DS) {
-		csi00_write(0x20 | STATUS, status | TX_DS);
+		setreg(STATUS, status | TX_DS);
 		packet_sent();
 		CE = 0; // radio power-down mode
 	} else if (status & RX_DR) {
-		csi00_write(0x20 | STATUS, status | RX_DR);
+		setreg(STATUS, status | RX_DR);
 		process_poll(&txrx_process);
 	} else if (status & MAX_RT) {
-		csi00_write(0x20 | STATUS, status | MAX_RT);
+		setreg(STATUS, status | MAX_RT);
 		rtx_timeout();
 	}
  	PMK0 = 0;
