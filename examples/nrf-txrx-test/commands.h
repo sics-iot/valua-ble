@@ -23,9 +23,16 @@ extern unsigned min_lqi, max_lqi;
 /* void setreg(enum cc2420_register regname, unsigned value); */
 /* uint16_t cc2420_get_frequency(void); */
 /* int cc2420_set_frequency(uint16_t f); */
+struct command
+{
+	const char ch;
+	const char *name;
+	void (*f)(void);
+};
 
 void do_command(char *cmd);
 void commands_set_callback(void (*f)(int));
+void commands_set_command_table(const struct command *ptr);
 void var_update(char op, char var);
 void field_update(char c, char op);
 

@@ -2,13 +2,6 @@
 #include <string.h>
 #include <inttypes.h>
 
-/* #include "net/rime/rime.h" */
-/* #include "net/rime/rimestats.h" */
-#include "dev/watchdog.h"
-/* #include "sys/node-id.h" */
-/* #include "lib/crc16.h" */
-
-#include "csi00.h"
 #include "commands.h"
 
 static const struct variable *user_vars;
@@ -23,16 +16,6 @@ struct field
 	unsigned msb;
 	unsigned lsb;
 };
-
-/*---------------------------------------------------------------------------*/
-struct command
-{
-	const char ch;
-	const char *name;
-	void (*f)(void);
-};
-
-static void help(void);
 
 /*---------------------------------------------------------------------------*/
 const static struct field field_list[] = {
@@ -76,24 +59,15 @@ const static struct field field_list[] = {
 /* 	iprintf("RSSI = %d LNAMIX_GAINMODE = %u VGA_GAIN = %u\n", val, lna, vga_gain); */
 /* } */
 /*---------------------------------------------------------------------------*/
-#define RF_CH 0x05
-static void
-channel_up(void)
+static const struct command *command_table_base;
+
+void
+commands_set_command_table(const struct command *ptr)
 {
-	uint8_t rf_ch = csi00_read(RF_CH);
-	rf_ch = (rf_ch + 1) % 128;
-	csi00_write(0x20 | RF_CH, rf_ch);
-	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
+	command_table_base = ptr;
 }
 /*---------------------------------------------------------------------------*/
-static void
-channel_down(void)
-{
-	uint8_t rf_ch = csi00_read(RF_CH);
-	rf_ch = (rf_ch - 1) % 128;
-	csi00_write(0x20 | RF_CH, rf_ch);
-	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
-}
+
 /*---------------------------------------------------------------------------*/
 /* static void */
 /* view_rx_statistics(void) */
@@ -316,82 +290,22 @@ channel_down(void)
 /* 	iprintf("Status 0x%01X\n", status); */
 /* } */
 
-/* /\* Show current battery level *\/ */
-/* /\* Vtoggle=1.25/27*(72-BATTMON_VOLTAGE) *\/ */
-/* static void */
-/* battery_level(void) */
-/* { */
-/* 	unsigned lv, lv_orig; */
-/* 	unsigned ok; */
-/* 	unsigned reg; */
-
-/* 	reg = getreg(CC2420_BATTMON); */
-/* 	lv_orig = FV(reg, 4, 0); */
-/* 	setreg(CC2420_BATTMON, SETFV(reg, 1, 5, 5)); // BATTMON_EN=1 */
-/* 	reg = getreg(CC2420_BATTMON); */
-/* 	for(lv=0;lv<32;lv++) { */
-/* 		setreg(CC2420_BATTMON, SETFV(reg, lv, 4, 0)); */
-/* 		reg = getreg(CC2420_BATTMON); */
-/* 		ok = FV(reg, 6, 6); */
-/* 		/\* iprintf("%u: %u\n", lv, ok); *\/ */
-/* 		if(ok) break; */
-/* 	} */
-
-/* 	iprintf("Battery level is between %u and %u\n", lv-1, lv); */
-/* 	setreg(CC2420_BATTMON, SETFV(reg, 0, 5, 5)); // BATTMON_EN=0 */
-/* 	setreg(CC2420_BATTMON, SETFV(reg, lv_orig, 4, 0)); // restore original monitor level */
-/* } */
-
-static const struct command command_table[] =	{
-	{'h', "Help", help},
-	/* {'e', "Reboot", reboot}, */
-	/* {'w', "TX power level", view_tx_power_level}, */
-	/* {'u', "TX power+", power_up}, */
-	/* {'d', "TX power-", power_down}, */
-	/* {'r', "RSSI", rssi}, */
-	{'+', "Channel+", channel_up},
-	{'-', "Channel-", channel_down},
-	/* {'v', "Successful pkt receptions", view_rx_statistics}, */
-	/* {'V', "Unsuccessful pkt receptions", view_failed_rx_statistics}, */
-	/* {'H', "Enter HSSD mode", debug_hssd}, */
-	/* {'A', "Enable analog test mode", debug_analog}, */
-	/* {'S', "Alter sync word", alter_syncword}, */
-	/* {'M', "MAC address update", mac_update}, */
-	/* {'L', "Show all registers", show_all_registers}, */
-	/* {'s', "CC2420 status byte", status}, */
-	/* {'b', "Battery level", battery_level}, */
-	/* {'N', "Burn node id", burn_node_id}, */
-	/* {'R', "Read TXFIFO", read_tx_fifo}, */
-	/* {'W', "Write TXFIFO", write_tx_fifo}, */
-	/* {'F', "Read RXFIFO", read_rx_fifo} */
-};
-
-/* Help message: available commands */
-static void
-help(void)
-{
-	const struct command *cmd;
-	const struct field *fp;
-	iprintf("Single character commands:\n");
-	for(cmd=command_table; cmd < command_table + sizeof(command_table)/sizeof(struct command); cmd++)
-		iprintf("%c %s\n", cmd->ch, cmd->name);
-
-	iprintf("---------\n");
-	iprintf("nRF field update commands <cmd name width(bits)>:\n");
-	for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field); fp++)
-		iprintf("%c %s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
-}
 /*-----------------------------------------------------------------------------*/
 static void
 exec_command(char c)
 {
-	const struct command *ptr = &command_table[0];
-	for(;ptr<command_table+sizeof(command_table)/sizeof(struct command);ptr++) {
-		if(c == ptr->ch) {
-			ptr->f();
-			return;
+	if(command_table_base) {
+		const struct command *cmd_ptr = command_table_base;
+		while(cmd_ptr->f) {
+			if(c == cmd_ptr->ch) {
+				cmd_ptr->f();
+				return;
+			}
+			cmd_ptr++;
 		}
+		// error: no such command
 	}
+	// error: command table not set
 }
 
 /* static unsigned */
@@ -442,8 +356,11 @@ do_command(char *s)
 		strncpy(last_cmd, s, sizeof(last_cmd));
 	}
 
+	/* 0-9: dialpad callback */
 	if(s[0] >= '0' && s[0] <= '9' && callback != NULL)	{callback(s[0] - '0');}
+	/* twin chars: special command */
 	else if (s[0]==s[1]) {exec_command(s[0]);}
+	/* arithmetic operator plus char: update variable */
 	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
 	/* else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]=='\0') {field_update(s[0], s[1]);} */
 	/* else if(s[0]=='x') {print_reg(&s[1]);} */

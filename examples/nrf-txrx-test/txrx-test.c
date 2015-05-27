@@ -49,6 +49,9 @@
 
 extern unsigned long et_process_polled;
 /*---------------------------------------------------------------------------*/
+static void help(void);
+
+/*---------------------------------------------------------------------------*/
 PROCESS(blink_process, "blink process");
 PROCESS(txrx_process, "txrx process");
 AUTOSTART_PROCESSES(&blink_process, &txrx_process);
@@ -188,6 +191,70 @@ start_mode(int new_mode)
 	iprintf("Unknown mode\n");
 }
 
+/* Help message: available commands */
+#define RF_CH 0x05
+static void
+channel_up(void)
+{
+	uint8_t rf_ch = csi00_read(RF_CH);
+	rf_ch = (rf_ch + 1) % 128;
+	csi00_write(0x20 | RF_CH, rf_ch);
+	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
+}
+/*---------------------------------------------------------------------------*/
+static void
+channel_down(void)
+{
+	uint8_t rf_ch = csi00_read(RF_CH);
+	rf_ch = (rf_ch - 1) % 128;
+	csi00_write(0x20 | RF_CH, rf_ch);
+	iprintf("RF channel: %hu\n", csi00_read(RF_CH));
+}
+
+static const struct command command_table[] =	{
+	{'h', "Help", help},
+	/* {'e', "Reboot", reboot}, */
+	/* {'w', "TX power level", view_tx_power_level}, */
+	/* {'u', "TX power+", power_up}, */
+	/* {'d', "TX power-", power_down}, */
+	/* {'r', "RSSI", rssi}, */
+	{'+', "Channel+", channel_up},
+	{'-', "Channel-", channel_down},
+	/* {'v', "Successful pkt receptions", view_rx_statistics}, */
+	/* {'V', "Unsuccessful pkt receptions", view_failed_rx_statistics}, */
+	/* {'H', "Enter HSSD mode", debug_hssd}, */
+	/* {'A', "Enable analog test mode", debug_analog}, */
+	/* {'S', "Alter sync word", alter_syncword}, */
+	/* {'M', "MAC address update", mac_update}, */
+	/* {'L', "Show all registers", show_all_registers}, */
+	/* {'s', "CC2420 status byte", status}, */
+	/* {'b', "Battery level", battery_level}, */
+	/* {'N', "Burn node id", burn_node_id}, */
+	/* {'R', "Read TXFIFO", read_tx_fifo}, */
+	/* {'W', "Write TXFIFO", write_tx_fifo}, */
+	/* {'F', "Read RXFIFO", read_rx_fifo} */
+	{'\0', "", NULL},
+};
+
+static void
+help(void)
+{
+	const struct command *cmd_ptr;
+	/* const struct field *fp; */
+
+	iprintf("Single character commands:\n");
+	cmd_ptr = command_table;
+	while(cmd_ptr->f) {
+		iprintf("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
+		cmd_ptr++;
+	}
+
+	/* iprintf("---------\n"); */
+	/* iprintf("nRF field update commands <cmd name width(bits)>:\n"); */
+	/* for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field); fp++) */
+	/* 	iprintf("%c %s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1); */
+}
+
 PROCESS_THREAD(txrx_process, ev, data)
 {
 	/* static uint8_t  addr; */
@@ -213,8 +280,8 @@ PROCESS_THREAD(txrx_process, ev, data)
 
 	/* set up irq (INTP0) registers */
 	// falling edge trigger
-	EGP0bits.egp0 = 0;
-	EGN0bits.egn0 = 1;
+	EGP0bits.egp0 = 0; // Caution: both the register and its bit 0 are named EGP0 in the manual
+	EGN0bits.egn0 = 1; // Caution: both the register and its bit 0 are named EGN0 in the manual
 	// enable edge detection irq
 	PIF0 = 0;
 	PMK0 = 0;
@@ -252,6 +319,7 @@ PROCESS_THREAD(txrx_process, ev, data)
 
 	/* Set serial command callback function */
 	commands_set_callback(start_mode);
+	commands_set_command_table(&command_table[0]);
 
 	iprintf("Press button to broadcast a packet\n");
 
@@ -315,3 +383,4 @@ p0_handler(void)
 	}
  	PMK0 = 0;
 }
+
