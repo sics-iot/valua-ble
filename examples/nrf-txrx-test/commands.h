@@ -1,28 +1,6 @@
-#ifndef COMMANDS
-#define COMMANDS
+#ifndef __COMMANDS__
+#define __COMMANDS__
 
-// Field mask, generated from MSB and LSB. E.g. FM(4,0)=0x000F, FM(5,1)=0x001E
-#define FM(MSB, LSB) \
-	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
-
-// Field value, extracted from register value, MSB and LSB
-#define FV(REGVAL, MSB, LSB) \
-	((REGVAL & FM(MSB, LSB)) >> LSB)
-
-// Register value, with updated field
-#define SETFV(REGVAL, FV, MSB, LSB) \
-	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
-
-extern long int sum_rssi;
-extern long unsigned sum_lqi;
-extern int min_rssi, max_rssi;
-extern unsigned min_lqi, max_lqi;
-/* extern uint8_t hex_seq[]; */
-
-/* unsigned getreg(enum cc2420_register regname); */
-/* void setreg(enum cc2420_register regname, unsigned value); */
-/* uint16_t cc2420_get_frequency(void); */
-/* int cc2420_set_frequency(uint16_t f); */
 struct command
 {
 	const char ch;
@@ -30,11 +8,14 @@ struct command
 	void (*f)(void);
 };
 
-void do_command(char *cmd);
-void commands_set_callback(void (*f)(int));
-void commands_set_command_table(const struct command *ptr);
-void var_update(char op, char var);
-void field_update(char c, char op);
+struct field
+{
+	char ch;
+	const char *name;
+	uint8_t addr;
+	unsigned msb;
+	unsigned lsb;
+};
 
 // User-adjustable variable (non-negative integer type)
 union number {
@@ -53,18 +34,12 @@ struct variable
 	unsigned ceiling;
 };
 
-#define OP(n, op)\
-				switch(op) {\
- 				case '+':	n += 1;	break;\
-				case '-': n -= 1;	break;\
- 				case '*': n *= 10;	break;\
- 				case '/': n /= 10;	break;\
- 				case '>': n <<= 1;	break;\
- 				case '<': n >>= 1;	break;\
- 				case '^': n += 10;	break;\
- 				case '\'': n -= 10;	break;\
-				default:;\
-				}
-#endif
+void do_command(char *cmd);
+void commands_init(void (*dialpad)(int),
+                   uint8_t (*getreg)(uint8_t addr),
+                   void (*setreg)(uint8_t addr, uint8_t val),
+                   const struct command *cmd_list,
+                   const struct field *flist,
+                   const struct variable *vars);
 
-void commands_set_user_vars(const struct variable *vars);
+#endif /*__COMMANDS__*/

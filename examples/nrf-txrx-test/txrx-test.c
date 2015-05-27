@@ -250,23 +250,51 @@ static const struct command command_table[] =	{
 	{'\0', "", NULL},
 };
 
+#define RF_SETUP 0x06
+const static struct field field_list[] = {
+	{'w', "RF_PWR", RF_SETUP, 2, 1},
+	{'\0', "", 0x00, 0, 0},
+};
+
+#define TX_INTERVAL (CLOCK_SECOND / 32)
+#define MAX_TX_PACKETS 10
+#define PAYLOAD_LEN 20
+static clock_time_t tx_interval = TX_INTERVAL;
+static unsigned max_tx_packets = MAX_TX_PACKETS;
+static unsigned payload_len = PAYLOAD_LEN;
+
+/* user variables modifiable by serial commands */
+static struct variable const user_variable_list[] = {
+	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
+	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 32},
+	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
+	{'\0', NULL, 0, NULL, -1, -1}
+};
+
 static void
 help(void)
 {
 	const struct command *cmd_ptr;
-	/* const struct field *fp; */
+	const struct field *fp;
+	const struct variable *vp;
 
-	iprintf("Single character commands:\n");
+	iprintf("Special cmds:\n");
 	cmd_ptr = command_table;
 	while(cmd_ptr->f) {
 		iprintf("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
 		cmd_ptr++;
 	}
 
-	/* iprintf("---------\n"); */
-	/* iprintf("nRF field update commands <cmd name width(bits)>:\n"); */
-	/* for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field); fp++) */
-	/* 	iprintf("%c %s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1); */
+	iprintf("---------\n");
+	iprintf("register field cmds <cmd name width(bits)>:\n");
+	for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field) -1; fp++)
+		iprintf("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
+
+	iprintf("---------\n");
+	iprintf("User variables <Cmd\tVariable Width>:\n");
+	for(vp=user_variable_list;vp->ch != '\0';vp++) {
+		iprintf("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
+	}
 }
 
 PROCESS_THREAD(txrx_process, ev, data)
@@ -331,10 +359,8 @@ PROCESS_THREAD(txrx_process, ev, data)
 	/* Set radio mode  */
 	start_mode(PD);
 
-	/* Set serial command callback function */
-	commands_set_callback(start_mode);
-	commands_set_command_table(&command_table[0]);
-
+	/* Set serial commands: user callbacks and user data structures */
+	commands_init(start_mode, getreg, setreg, command_table, field_list, user_variable_list);
 	iprintf("Press button to broadcast a packet\n");
 
 	while(1) {
