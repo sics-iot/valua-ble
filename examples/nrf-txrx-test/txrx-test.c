@@ -235,6 +235,9 @@ const static struct mode mode_list[] = {
 void
 start_mode(int new_mode)
 {
+	if (new_mode<0 || new_mode>=sizeof(mode_list) / sizeof(mode_list[0]))
+		return;
+
 	if (mode_list[new_mode].prelog) mode_list[new_mode].prelog();
 	mode_list[new_mode].handler();
 	if (mode_list[new_mode].prolog) mode_list[new_mode].prolog();
