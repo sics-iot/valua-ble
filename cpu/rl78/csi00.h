@@ -52,6 +52,6 @@ void csi00_write(uint8_t addr, uint8_t val);
 uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len);
 void
 csi00_write_message(uint8_t addr, uint8_t *buf, uint8_t len);
-uint8_t
+int
 csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len);
 #endif /* CSI00_H__ */

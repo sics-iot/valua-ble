@@ -163,7 +163,7 @@ csi00_write(uint8_t addr, uint8_t val)
 }
 
 
-uint8_t
+int
 csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len)
 {
 	int i;
@@ -184,7 +184,7 @@ csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len)
 	}
 
 	CSN = 1;
-	return len;
+	return i;
 }
 
 void
