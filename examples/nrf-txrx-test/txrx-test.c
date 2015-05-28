@@ -144,17 +144,11 @@ setreg(uint8_t addr, uint8_t val)
 	csi00_write(0x20 | addr, val);
 }
 
-/* modes */
-#define PD 0
-#define RX 1
-#define TX 2
-
 static int mode, last_mode;
 static uint8_t tx_addr[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
 static uint8_t rx_addr_p0[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
 
 struct mode {
-	int mode;
 	const char *display;
 	void (*handler)(void);
 	void (*prelog)(void);
@@ -225,11 +219,15 @@ tx_et_handler(void)
 	}
 }
 
+/* modes */
+#define PD 0
+#define RX 1
+#define TX 2
 const static struct mode mode_list[] = {
-	{PD, "Power down", pd_mode, NULL, NULL, NULL},
-	{RX, "RX", rx_mode, NULL, NULL, NULL},
+	{"Power down", pd_mode, NULL, NULL, NULL},
+	{"RX", rx_mode, NULL, NULL, NULL},
 	/* {UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, attack_eth}, */
-	{TX, "TX broadcast", tx_mode, NULL, NULL, tx_et_handler},
+	{"TX broadcast", tx_mode, NULL, NULL, tx_et_handler},
 };
 
 void
