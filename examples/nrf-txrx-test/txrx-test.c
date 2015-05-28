@@ -189,6 +189,8 @@ nrf_send(const void *payload, unsigned short len)
 {
 	csi00_write_message(W_TX_PAYLOAD_NO_ACK, (uint8_t *)payload, len);
 	CE = 1; // activate RX/TX
+	/* clock_delay_usec(10); */
+	/* CE = 0; */
 	return RADIO_TX_OK;
 }
 
@@ -314,7 +316,6 @@ et_handler(void)
 PROCESS_THREAD(txrx_process, ev, data)
 {
 	/* static uint8_t  addr; */
-	uint8_t tx_buf[32];
 	uint8_t rx_buf[32];
 	
 	PROCESS_BEGIN();
@@ -389,13 +390,7 @@ PROCESS_THREAD(txrx_process, ev, data)
 		} else if (ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
 			et_handler();
 		} else	if (ev == sensors_event && data == &button_sensor) {
-			iprintf("seqno: %u\n", seqno);
-			int n = sniprintf((char *)tx_buf, sizeof(tx_buf), "%u", seqno);
-			csi00_write_message(W_TX_PAYLOAD_NO_ACK, (uint8_t *)tx_buf, n);
-			CE = 1; // activate RX/TX
-			seqno++;
-			/* clock_delay_usec(10); */
-			/* CE = 0; */
+			do_command("h");
 		} else if (ev == serial_line_event_message) {
 			do_command((char *)data);
 		}
