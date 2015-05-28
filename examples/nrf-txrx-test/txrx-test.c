@@ -61,39 +61,8 @@ static unsigned seqno = 0;
 static clock_time_t tx_interval = TX_INTERVAL;
 static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
+static uint8_t rx_buf[32];
 
-/*---------------------------------------------------------------------------*/
-PROCESS(blink_process, "blink process");
-PROCESS(txrx_process, "txrx process");
-AUTOSTART_PROCESSES(&blink_process, &txrx_process);
-/*---------------------------------------------------------------------------*/
-PROCESS_THREAD(blink_process, ev, data)
-{
-	static struct etimer et;
-	
-	PROCESS_BEGIN();
-
-	iprintf("Hello, blink\n");
-
-	etimer_set(&et, CLOCK_SECOND * 1);
-
-	while(1) {
-		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		LED1 = 0;
-		etimer_set(&et, CLOCK_SECOND / 4);
-		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		LED1 = 1;
-		etimer_set(&et, CLOCK_SECOND / 4);
-		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		LED1 = 0;
-		etimer_set(&et, CLOCK_SECOND / 4);
-		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		LED1 = 1;
-		etimer_set(&et, CLOCK_SECOND / 4 * 5);
-	}
-	  
-	PROCESS_END();
-}
 /*---------------------------------------------------------------------------*/
 /* nRF24L01+ commands */
 #define FLUSH_TX 0xE1
@@ -132,6 +101,15 @@ PROCESS_THREAD(blink_process, ev, data)
 #define RX_P_NO BV(3)|BV(2)|BV(1)
 #define TX_FULL BV(0)
 
+/* modes */
+#define PD 0
+#define RX 1
+#define TX 2
+
+static uint8_t tx_addr[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
+static uint8_t rx_addr_p0[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
+struct radio_driver *radio;
+
 static uint8_t
 getreg(uint8_t addr)
 {
@@ -143,18 +121,6 @@ setreg(uint8_t addr, uint8_t val)
 {
 	csi00_write(0x20 | addr, val);
 }
-
-static int mode, last_mode;
-static uint8_t tx_addr[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
-static uint8_t rx_addr_p0[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
-
-struct mode {
-	const char *display;
-	void (*handler)(void);
-	void (*prelog)(void);
-	void (*prolog)(void);
-	void (*et_handler)(void);
-};
 
 static void
 pd_mode(void)
@@ -185,6 +151,53 @@ tx_mode(void)
 }
 
 static int
+nrf_init(void)
+{
+	/* Set up digital output: CE and CSN */
+	PM0 &= ~0x3;
+	CSN = 1; // set SPI bus idle
+	CE = 0; // deactivate RX/TX
+
+	/* set up irq (INTP0) registers */
+	// falling edge trigger
+	EGP0bits.egp0 = 0; // Caution: both the register and its bit 0 are named EGP0 in the manual
+	EGN0bits.egn0 = 1; // Caution: both the register and its bit 0 are named EGN0 in the manual
+	// enable edge detection irq
+	PIF0 = 0;
+	PMK0 = 0;
+	// no need to set port direction as P137 is input-only
+
+	/* Enable all three features: dynamic payload length, payload with ack, w_tx_payload_noack command */
+	setreg(FEATURE, 0x07);
+	/* Enable dynamic pl length in data pipe 0 */
+	setreg(DYNPD, 0x01);
+
+	/* Set addresses */
+	int i;
+	csi00_write_message(0x20 | TX_ADDR, tx_addr, sizeof(tx_addr));
+	(void)csi00_read_message(TX_ADDR, tx_addr, sizeof(tx_addr));
+	iprintf("TX addr: 0x");
+	for(i = 0;i < sizeof(tx_addr);i++) {
+		iprintf("%02X", tx_addr[i]);
+	}
+	iprintf("\n");
+
+	csi00_write_message(0x20 | RX_ADDR_P0, rx_addr_p0, sizeof(rx_addr_p0));
+	(void)csi00_read_message(RX_ADDR_P0, rx_addr_p0, sizeof(rx_addr_p0));
+	iprintf("RX addr p0: 0x");
+	for(i = 0;i < sizeof(rx_addr_p0);i++) {
+		iprintf("%02X", rx_addr_p0[i]);
+	}
+	iprintf("\n");
+
+	/* Set RF channel */
+	setreg(RF_CH, 63);
+	iprintf("RF channel: %hu\n", getreg(RF_CH));
+
+	return 0;
+}
+
+static int
 nrf_send(const void *payload, unsigned short len)
 {
 	csi00_write_message(W_TX_PAYLOAD_NO_ACK, (uint8_t *)payload, len);
@@ -193,6 +206,89 @@ nrf_send(const void *payload, unsigned short len)
 	/* CE = 0; */
 	return RADIO_TX_OK;
 }
+
+static int
+nrf_read(void *buf, unsigned short buf_len)
+{
+	uint8_t payload_len = getreg(R_RX_PL_WID);
+
+	return csi00_read_message(R_RX_PAYLOAD, rx_buf, payload_len);
+
+}
+
+static int
+nrf_on(void)
+{
+	rx_mode();
+	return 0;
+}
+
+static int
+nrf_off(void)
+{
+	pd_mode();
+	return 0;
+}
+
+/* Contiki radio driver struct for nRF */
+struct radio_driver nrf24l01p_driver = {
+	nrf_init,
+	NULL, // int (* prepare)(const void *payload, unsigned short payload_len);
+	NULL, //  int (* transmit)(unsigned short transmit_len);
+	nrf_send,
+	nrf_read,
+	NULL, // int (* channel_clear)(void);
+	NULL, // int (* receiving_packet)(void);
+	NULL, // int (* pending_packet)(void);
+	nrf_on,
+	nrf_off,
+	NULL, // radio_result_t (* get_value)(radio_param_t param, radio_value_t *value);
+	NULL, // radio_result_t (* set_value)(radio_param_t param, radio_value_t value);
+	NULL, // radio_result_t (* get_object)(radio_param_t param, void *dest, size_t size);
+	NULL, // radio_result_t (* set_object)(radio_param_t param, const void *src, size_t size);
+};
+/*---------------------------------------------------------------------------*/
+PROCESS(blink_process, "blink process");
+PROCESS(txrx_process, "txrx process");
+AUTOSTART_PROCESSES(&blink_process, &txrx_process);
+/*---------------------------------------------------------------------------*/
+PROCESS_THREAD(blink_process, ev, data)
+{
+	static struct etimer et;
+	
+	PROCESS_BEGIN();
+
+	iprintf("Hello, blink\n");
+
+	etimer_set(&et, CLOCK_SECOND * 1);
+
+	while(1) {
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 0;
+		etimer_set(&et, CLOCK_SECOND / 4);
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 1;
+		etimer_set(&et, CLOCK_SECOND / 4);
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 0;
+		etimer_set(&et, CLOCK_SECOND / 4);
+		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+		LED1 = 1;
+		etimer_set(&et, CLOCK_SECOND / 4 * 5);
+	}
+	  
+	PROCESS_END();
+}
+
+static int mode, last_mode;
+
+struct mode {
+	const char *display;
+	void (*handler)(void);
+	void (*prelog)(void);
+	void (*prolog)(void);
+	void (*et_handler)(void);
+};
 
 /* etimer expiration handler for TX mode */
 static void
@@ -210,7 +306,7 @@ tx_et_handler(void)
 		}
 		sniprintf((char *)buf, sizeof(buf), "%u", seqno);
 
-		errno = nrf_send(buf, payload_len);
+		errno = radio->send(buf, payload_len);
 		if (errno == RADIO_TX_OK) iprintf(". ");
 		else iprintf("nRF send error: %d\n", errno);
 		++seqno;
@@ -221,10 +317,6 @@ tx_et_handler(void)
 	}
 }
 
-/* modes */
-#define PD 0
-#define RX 1
-#define TX 2
 const static struct mode mode_list[] = {
 	{"Power down", pd_mode, NULL, NULL, NULL},
 	{"RX", rx_mode, NULL, NULL, NULL},
@@ -315,9 +407,6 @@ et_handler(void)
 /*-----------------------------------------------------------------------------*/
 PROCESS_THREAD(txrx_process, ev, data)
 {
-	/* static uint8_t  addr; */
-	uint8_t rx_buf[32];
-	
 	PROCESS_BEGIN();
 
 	iprintf("Hello, txrx test\n");
@@ -328,51 +417,10 @@ PROCESS_THREAD(txrx_process, ev, data)
 		process_exit(process_current);
 	}
 
-	/* Set up digital output: CE and CSN */
-	PM0 &= ~0x3;
-	CSN = 1; // set SPI bus idle
-	CE = 0; // deactivate RX/TX
-
-	/* set up irq (INTP0) registers */
-	// falling edge trigger
-	EGP0bits.egp0 = 0; // Caution: both the register and its bit 0 are named EGP0 in the manual
-	EGN0bits.egn0 = 1; // Caution: both the register and its bit 0 are named EGN0 in the manual
-	// enable edge detection irq
-	PIF0 = 0;
-	PMK0 = 0;
-	// no need to set port direction as P137 is input-only
-
-	/* Enable all three features: dynamic payload length, payload with ack, w_tx_payload_noack command */
-	setreg(FEATURE, 0x07);
-	/* Enable dynamic pl length in data pipe 0 */
-	setreg(DYNPD, 0x01);
-
-	/* Set addresses */
-	int i;
-	csi00_write_message(0x20 | TX_ADDR, tx_addr, sizeof(tx_addr));
-	(void)csi00_read_message(TX_ADDR, tx_addr, sizeof(tx_addr));
-	iprintf("TX addr: 0x");
-	for(i = 0;i < sizeof(tx_addr);i++) {
-		iprintf("%02X", tx_addr[i]);
-	}
-	iprintf("\n");
-
-	csi00_write_message(0x20 | RX_ADDR_P0, rx_addr_p0, sizeof(rx_addr_p0));
-	(void)csi00_read_message(RX_ADDR_P0, rx_addr_p0, sizeof(rx_addr_p0));
-	iprintf("RX addr p0: 0x");
-	for(i = 0;i < sizeof(rx_addr_p0);i++) {
-		iprintf("%02X", rx_addr_p0[i]);
-	}
-	iprintf("\n");
-
-	/* Set RF channel */
-	setreg(RF_CH, 63);
-	iprintf("RF channel: %hu\n", getreg(RF_CH));
-
-	/* Set radio mode  */
+	/* Start radio  */
+	radio = &nrf24l01p_driver;
+	radio->init();
 	start_mode(PD);
-
-	PROCESS_PAUSE();
 
 	/* Set serial commands: user callbacks and user data structures */
 	commands_init(start_mode, getreg, setreg, command_table, field_list, user_variable_list);
@@ -380,8 +428,8 @@ PROCESS_THREAD(txrx_process, ev, data)
 	while(1) {
 		PROCESS_WAIT_EVENT();
 		if (ev == PROCESS_EVENT_POLL) {
-			uint8_t payload_len = getreg(R_RX_PL_WID);
-			(void)csi00_read_message(R_RX_PAYLOAD, rx_buf, payload_len);
+			int i;
+			int payload_len = radio->read(rx_buf, sizeof(rx_buf));
 			iprintf("received (%hu): 0x", payload_len);
 			for(i = 0;i < payload_len;i++) {
 				iprintf("%02X", rx_buf[i]);
@@ -432,4 +480,3 @@ p0_handler(void)
 	}
  	PMK0 = 0;
 }
-
