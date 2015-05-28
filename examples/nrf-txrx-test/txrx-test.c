@@ -45,10 +45,23 @@
 #include "csi00.h"
 #include "commands.h"
 #include "watchdog.h"
+#include "radio.h"
+#include "random.h"
 
 #include <stdio.h> /* For printf() */
 
 extern unsigned long et_process_polled;
+
+static struct etimer et;
+static unsigned seqno = 0;
+
+#define TX_INTERVAL (CLOCK_SECOND / 32)
+#define MAX_TX_PACKETS 10
+#define PAYLOAD_LEN 20
+static clock_time_t tx_interval = TX_INTERVAL;
+static unsigned max_tx_packets = MAX_TX_PACKETS;
+static unsigned payload_len = PAYLOAD_LEN;
+
 /*---------------------------------------------------------------------------*/
 PROCESS(blink_process, "blink process");
 PROCESS(txrx_process, "txrx process");
@@ -136,28 +149,28 @@ setreg(uint8_t addr, uint8_t val)
 #define RX 1
 #define TX 2
 
-static int mode;
+static int mode, last_mode;
 static uint8_t tx_addr[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
 static uint8_t rx_addr_p0[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
 
 struct mode {
 	int mode;
 	const char *display;
-	void (*handler)(int mode);
-	void (*prelog)(int mode);
-	void (*prolog)(int mode);
+	void (*handler)(void);
+	void (*prelog)(void);
+	void (*prolog)(void);
 	void (*et_handler)(void);
 };
 
 static void
-pd_mode(int new_mode)
+pd_mode(void)
 {
 	setreg(CONFIG,
 	            (MASK_RX_DR|MASK_TX_DS|MASK_MAX_RT|PRIM_RX)&(~PWR_UP));
 }
 
 static void
-rx_mode(int new_mode)
+rx_mode(void)
 {
 	(void)csi00_strobe(FLUSH_RX);
 	setreg(CONFIG,
@@ -166,40 +179,68 @@ rx_mode(int new_mode)
 }
 
 static void
-tx_mode(int new_mode)
+tx_mode(void)
 {
 	CE = 0;
 	(void)csi00_strobe(FLUSH_TX);
 	setreg(CONFIG,
 	            (MASK_RX_DR|MASK_MAX_RT|PWR_UP)&(~MASK_TX_DS&~PRIM_RX));
+
+	// timeout starts packet transmisison
+	etimer_set(&et, CLOCK_SECOND);
+}
+
+static int
+nrf_send(const void *payload, unsigned short len)
+{
+	csi00_write_message(W_TX_PAYLOAD_NO_ACK, (uint8_t *)payload, len);
+	CE = 1; // activate RX/TX
+	return RADIO_TX_OK;
+}
+
+/* etimer expiration handler for TX mode */
+static void
+tx_et_handler(void)
+{
+	int i;
+	int errno;
+	uint8_t buf[32];
+
+	if(seqno < max_tx_packets) {
+		etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
+
+		for(i = 0;i < payload_len;++i) {
+			buf[i] = (uint8_t)random_rand();
+		}
+		sniprintf((char *)buf, sizeof(buf), "%u", seqno);
+
+		errno = nrf_send(buf, payload_len);
+		if (errno == RADIO_TX_OK) iprintf(". ");
+		else iprintf("nRF send error: %d\n", errno);
+		++seqno;
+	} else {
+		etimer_stop(&et);
+		iprintf("Finished sending %u packets\n", seqno);
+		seqno = 0;
+	}
 }
 
 const static struct mode mode_list[] = {
 	{PD, "Power down", pd_mode, NULL, NULL, NULL},
 	{RX, "RX", rx_mode, NULL, NULL, NULL},
 	/* {UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, attack_eth}, */
-	{TX, "TX broadcast", tx_mode, NULL, NULL, NULL},
-	{-1, NULL, NULL, NULL, NULL, NULL}
+	{TX, "TX broadcast", tx_mode, NULL, NULL, tx_et_handler},
 };
 
 void
 start_mode(int new_mode)
 {
-	static int last_mode;
-	const struct mode *p;
-	for (p=&mode_list[0];p->handler;p++) {
-		if(p->mode == new_mode) {
-			if(p->prelog) p->prelog(last_mode);
-			/* reset_transmitter(); */
-			p->handler(new_mode);
-			last_mode = mode;
-			mode = new_mode;
-			if(p->prolog) p->prolog(mode);
-			iprintf("%s mode\n", p->display);
-			return;
-		}
-	}
-	iprintf("Unknown mode\n");
+	if (mode_list[new_mode].prelog) mode_list[new_mode].prelog();
+	mode_list[new_mode].handler();
+	if (mode_list[new_mode].prolog) mode_list[new_mode].prolog();
+	iprintf("%s mode\n", mode_list[mode].display);
+	last_mode = mode;
+	mode = new_mode;
 }
 
 /* Help message: available commands */
@@ -232,10 +273,6 @@ status(void)
 /*---------------------------------------------------------------------------*/
 static const struct command command_table[] =	{
 	{'e', "Reboot", watchdog_reboot},
-	/* {'w', "TX power level", view_tx_power_level}, */
-	/* {'u', "TX power+", power_up}, */
-	/* {'d', "TX power-", power_down}, */
-	/* {'r', "RSSI", rssi}, */
 	{'+', "Channel+", channel_up},
 	{'-', "Channel-", channel_down},
 	/* {'v', "Successful pkt receptions", view_rx_statistics}, */
@@ -251,15 +288,8 @@ static const struct command command_table[] =	{
 
 const static struct field field_list[] = {
 	{'w', "RF_PWR", RF_SETUP, 2, 1},
-	{'\0', "", 0x00, 0, 0},
+	{'\0', NULL, 0x00, 0, 0},
 };
-
-#define TX_INTERVAL (CLOCK_SECOND / 32)
-#define MAX_TX_PACKETS 10
-#define PAYLOAD_LEN 20
-static clock_time_t tx_interval = TX_INTERVAL;
-static unsigned max_tx_packets = MAX_TX_PACKETS;
-static unsigned payload_len = PAYLOAD_LEN;
 
 /* user variables modifiable by serial commands */
 static struct variable const user_variable_list[] = {
@@ -269,11 +299,20 @@ static struct variable const user_variable_list[] = {
 	{'\0', NULL, 0, NULL, -1, -1}
 };
 
+/*-----------------------------------------------------------------------------*/
+/* Etimer timeout handler */
+static void
+et_handler(void)
+{
+	etimer_reset(&et);
+	if (mode_list[mode].et_handler)
+		mode_list[mode].et_handler();
+}
+
+/*-----------------------------------------------------------------------------*/
 PROCESS_THREAD(txrx_process, ev, data)
 {
 	/* static uint8_t  addr; */
-	/* static struct etimer et; */
-	static unsigned seqno = 0;
 	uint8_t tx_buf[32];
 	uint8_t rx_buf[32];
 	
@@ -331,14 +370,24 @@ PROCESS_THREAD(txrx_process, ev, data)
 	/* Set radio mode  */
 	start_mode(PD);
 
+	PROCESS_PAUSE();
+
 	/* Set serial commands: user callbacks and user data structures */
 	commands_init(start_mode, getreg, setreg, command_table, field_list, user_variable_list);
-	iprintf("Press button to broadcast a packet\n");
 
 	while(1) {
-		/* Wait on button event or serial line event */
 		PROCESS_WAIT_EVENT();
-		if (ev == sensors_event && data == &button_sensor) {
+		if (ev == PROCESS_EVENT_POLL) {
+			uint8_t payload_len = getreg(R_RX_PL_WID);
+			(void)csi00_read_message(R_RX_PAYLOAD, rx_buf, payload_len);
+			iprintf("received (%hu): 0x", payload_len);
+			for(i = 0;i < payload_len;i++) {
+				iprintf("%02X", rx_buf[i]);
+			}
+			iprintf("\n");
+		} else if (ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
+			et_handler();
+		} else	if (ev == sensors_event && data == &button_sensor) {
 			iprintf("seqno: %u\n", seqno);
 			int n = sniprintf((char *)tx_buf, sizeof(tx_buf), "%u", seqno);
 			csi00_write_message(W_TX_PAYLOAD_NO_ACK, (uint8_t *)tx_buf, n);
@@ -348,14 +397,6 @@ PROCESS_THREAD(txrx_process, ev, data)
 			/* CE = 0; */
 		} else if (ev == serial_line_event_message) {
 			do_command((char *)data);
-		} else if (ev == PROCESS_EVENT_POLL) {
-			uint8_t payload_len = getreg(R_RX_PL_WID);
-			(void)csi00_read_message(R_RX_PAYLOAD, rx_buf, payload_len);
-			iprintf("received (%hu): 0x", payload_len);
-			for(i = 0;i < payload_len;i++) {
-				iprintf("%02X", rx_buf[i]);
-			}
-			iprintf("\n");
 		}
 	}
 
