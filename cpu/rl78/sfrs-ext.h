@@ -357,6 +357,10 @@ struct ADM2struct {
 	unsigned char            : 1;
 	unsigned char  awc       : 1;
 	unsigned char  adrck     : 1;
+	unsigned char       : 1;
+	unsigned char  adrefm     : 1;
+	unsigned char  adrefp0     : 1;
+	unsigned char  adrefp1     : 1;
 };
 
 struct ADULstruct {

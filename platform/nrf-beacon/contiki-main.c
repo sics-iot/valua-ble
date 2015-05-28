@@ -83,12 +83,9 @@ main(int argc, char **argv)
 	asm ("di");
 	/* Setup clocks */
 	CMC = 0x00U;                                        /* Default value: use on-chip osc. as system clock */
-	//  CSC = 0x80U;                                        /* Start XT1 and HOCO, stop X1 */
 	MSTOP = 1U;			/* Stop X1 */
-	//  CKC = 0x00U;
 	MCM0 = 0U;
 	clock_delay_usec(~0); // max value 65535
-	//  OSMC = 0x00;                                       /* Supply fsub to peripherals, including Interval Timer */
 	OSMC= 0x10U;
 
 	uart2_init();
@@ -128,15 +125,13 @@ main(int argc, char **argv)
 	/* Initialize LED output: */
 #define BIT(n) (1 << (n))
 	PM2 &= ~BIT(1); /* LED1 */
-	/* int i; */
-	/* for (i=0;i<3;i++) { */
-	/* 	LED1 = 0; // led on */
-	/* 	/\* delay_1sec(); *\/ */
-	/* 	clock_wait(CLOCK_SECOND); */
-	/* 	LED1 = 1; // led off */
-	/* 	/\* delay_1sec(); *\/ */
-	/* 	clock_wait(CLOCK_SECOND); */
-	/* } */
+	int i;
+	for (i=0;i<3;i++) {
+		LED1 = 0; // led on
+		clock_wait(CLOCK_SECOND / 4);
+		LED1 = 1; // led off
+		clock_wait(CLOCK_SECOND / 4);
+	}
 
 	/* crappy way of remembering and accessing argc/v */
 	contiki_argc = argc;
@@ -158,8 +153,6 @@ main(int argc, char **argv)
 	autostart_start(autostart_processes);
 
 	while(1) {
-		/* watchdog_periodic(); */
-
 		int r;
 		do {
 			/* Reset watchdog. */
