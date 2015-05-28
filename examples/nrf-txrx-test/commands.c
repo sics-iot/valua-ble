@@ -64,7 +64,7 @@ field_update(char c, char op)
 			reg = _getreg(fp->addr);
 			fv = FV(reg, fp->msb, fp->lsb);
 			/* skip update when no op */
-			if(op != '\0') {
+			if(op != c) {
 				OP(fv, op);
 				fv = fv % (0x1<<(fp->msb - fp->lsb +1));
 				reg = SETFV(reg, fv, fp->msb, fp->lsb);
@@ -209,12 +209,18 @@ do_command(char *s)
 		strncpy(last_cmd, s, sizeof(last_cmd));
 	}
 
-	/* 0-9: dialpad callback */
-	if(s[0] >= '0' && s[0] <= '9' && _dialpad != NULL)	{_dialpad(s[0] - '0');}
-	/* twin chars: special command */
-	else if (s[0]==s[1]) {exec_command(s[0]);}
-	/* arithmetic operator plus char: update variable */
-	else if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
-	else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]=='\0') {field_update(s[0], s[1]);}
+	/* single char command */
+	if(s[1] == '\0') {
+		/* 0-9: dialpad callback */
+		if(s[0] >= '0' && s[0] <= '9' && _dialpad != NULL) {_dialpad(s[0] - '0');}
+		/* others: special command */
+		else {exec_command(s[0]);}
+	} else {
+		/* multi char command */
+		/* arithmetic operator plus char: update variable */
+		if((s[0]=='+' || s[0]=='-' || s[0]=='*' || s[0]=='/' || s[0]=='<' || s[0]=='>' || s[0]=='^' || s[0]=='\'')) {var_update(s[0], s[1]);}
+		/* char plus operator or twin chars: update field/print field */
+		else if(s[1]=='+' || s[1]=='-' || s[1]=='<' || s[1]=='>' || s[1]==s[0]) {field_update(s[0], s[1]);}
 	/* else if(s[0]=='x') {print_reg(&s[1]);} */
+	}
 }
