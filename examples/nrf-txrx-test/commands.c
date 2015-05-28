@@ -222,7 +222,7 @@ help(void *foo)
 	case 1:
 		iprintf("---------\n");
 		iprintf("register field cmds <cmd name width(bits)>:\n");
-		for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field) -1; fp++)
+		for(fp=field_list; fp->name; fp++)
 			iprintf("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
 
 		/* Ugly pause */
