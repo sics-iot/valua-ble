@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include "contiki.h"
 
 #include "commands.h"
 
@@ -49,6 +50,8 @@ void commands_init(void (*dialpad)(int),
 	command_table_base = cmd_list;
 	field_list = flist;
 	user_vars = vars;
+
+	iprintf("press h for command list\n");
 }
 
 /*-----------------------------------------------------------------------------*/ 
@@ -194,6 +197,51 @@ exec_command(char c)
 /* 		iprintf("Unknown register: 0x%s\n", hex_str); */
 /* 	} */
 /* } */
+static void
+help(void *foo)
+{
+	static struct ctimer ct;
+	static int state = 0;
+	const struct command *cmd_ptr;
+	const struct field *fp;
+	const struct variable *vp;
+
+	switch(state) {
+	case 0:
+		iprintf("Special cmds:\n");
+		cmd_ptr = command_table_base;
+		while(cmd_ptr->f) {
+			iprintf("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
+			cmd_ptr++;
+		}
+		/* Ugly: pause print for a moment to avoid UART buffer overflow */
+		state++;
+		ctimer_set(&ct, CLOCK_SECOND/100, help, NULL);
+	break;
+
+	case 1:
+		iprintf("---------\n");
+		iprintf("register field cmds <cmd name width(bits)>:\n");
+		for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field) -1; fp++)
+			iprintf("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
+
+		/* Ugly pause */
+		state++;
+		ctimer_set(&ct, CLOCK_SECOND/100, help, NULL);
+		break;
+
+	case 2:
+		iprintf("---------\n");
+		iprintf("User variables <Cmd\tVariable Width>:\n");
+		for(vp=user_vars;vp->ch != '\0';vp++) {
+			iprintf("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
+		}
+
+		state = 0;
+	default:
+		;
+	}
+}
 
 void
 do_command(char *s)
@@ -211,6 +259,8 @@ do_command(char *s)
 
 	/* single char command */
 	if(s[1] == '\0') {
+		/* h: help */
+		if(s[0] == 'h') {help(NULL);}
 		/* 0-9: dialpad callback */
 		if(s[0] >= '0' && s[0] <= '9' && _dialpad != NULL) {_dialpad(s[0] - '0');}
 		/* others: special command */

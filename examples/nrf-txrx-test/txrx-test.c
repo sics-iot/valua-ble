@@ -44,13 +44,11 @@
 #include "dev/serial-line.h"
 #include "csi00.h"
 #include "commands.h"
+#include "watchdog.h"
 
 #include <stdio.h> /* For printf() */
 
 extern unsigned long et_process_polled;
-/*---------------------------------------------------------------------------*/
-static void help(void);
-
 /*---------------------------------------------------------------------------*/
 PROCESS(blink_process, "blink process");
 PROCESS(txrx_process, "txrx process");
@@ -97,6 +95,7 @@ PROCESS_THREAD(blink_process, ev, data)
 /* nRF24L01+ registers */
 #define CONFIG 0x00
 #define RF_CH 0x05
+#define RF_SETUP 0x06
 #define STATUS 0x07
 #define RX_ADDR_P0 0x0A
 #define TX_ADDR 0x10
@@ -230,9 +229,9 @@ status(void)
 	iprintf("nRF status: 0x%02X\n", getreg(STATUS));
 }
 
+/*---------------------------------------------------------------------------*/
 static const struct command command_table[] =	{
-	{'h', "Help", help},
-	/* {'e', "Reboot", reboot}, */
+	{'e', "Reboot", watchdog_reboot},
 	/* {'w', "TX power level", view_tx_power_level}, */
 	/* {'u', "TX power+", power_up}, */
 	/* {'d', "TX power-", power_down}, */
@@ -250,7 +249,6 @@ static const struct command command_table[] =	{
 	{'\0', "", NULL},
 };
 
-#define RF_SETUP 0x06
 const static struct field field_list[] = {
 	{'w', "RF_PWR", RF_SETUP, 2, 1},
 	{'\0', "", 0x00, 0, 0},
@@ -270,32 +268,6 @@ static struct variable const user_variable_list[] = {
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
 	{'\0', NULL, 0, NULL, -1, -1}
 };
-
-static void
-help(void)
-{
-	const struct command *cmd_ptr;
-	const struct field *fp;
-	const struct variable *vp;
-
-	iprintf("Special cmds:\n");
-	cmd_ptr = command_table;
-	while(cmd_ptr->f) {
-		iprintf("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
-		cmd_ptr++;
-	}
-
-	iprintf("---------\n");
-	iprintf("register field cmds <cmd name width(bits)>:\n");
-	for(fp=field_list; fp < field_list + sizeof(field_list)/sizeof(struct field) -1; fp++)
-		iprintf("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
-
-	iprintf("---------\n");
-	iprintf("User variables <Cmd\tVariable Width>:\n");
-	for(vp=user_variable_list;vp->ch != '\0';vp++) {
-		iprintf("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
-	}
-}
 
 PROCESS_THREAD(txrx_process, ev, data)
 {
