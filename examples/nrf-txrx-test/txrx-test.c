@@ -55,9 +55,9 @@ extern unsigned long et_process_polled;
 static struct etimer et;
 static unsigned seqno = 0;
 
-#define TX_INTERVAL (CLOCK_SECOND / 32)
+#define TX_INTERVAL (CLOCK_SECOND / 10)
 #define MAX_TX_PACKETS 10
-#define PAYLOAD_LEN 20
+#define PAYLOAD_LEN 10
 static clock_time_t tx_interval = TX_INTERVAL;
 static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
@@ -238,7 +238,7 @@ start_mode(int new_mode)
 	if (mode_list[new_mode].prelog) mode_list[new_mode].prelog();
 	mode_list[new_mode].handler();
 	if (mode_list[new_mode].prolog) mode_list[new_mode].prolog();
-	iprintf("%s mode\n", mode_list[mode].display);
+	iprintf("%s mode\n", mode_list[new_mode].display);
 	last_mode = mode;
 	mode = new_mode;
 }
