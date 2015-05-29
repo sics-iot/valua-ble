@@ -84,9 +84,9 @@ main(int argc, char **argv)
 	/* Setup clocks */
 	CMC = 0x00U;                                        /* Default value: use on-chip osc. as system clock */
 	MSTOP = 1U;			/* Stop X1 */
-	MCM0 = 0U;
+	MCM0 = 0U; // select the high-speed on-chip oscillator clock (fIH) as the main system clock
 	clock_delay_usec(~0); // max value 65535
-	OSMC= 0x10U;
+	OSMC= 0x10U; // select fIH as the source of real-time clock and 12-bit interval timer
 
 	uart2_init();
 	asm ("ei");                                             /* Enable interrupts */
