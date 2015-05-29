@@ -197,6 +197,8 @@ exec_command(char c)
 /* 		iprintf("Unknown register: 0x%s\n", hex_str); */
 /* 	} */
 /* } */
+
+/* Print commands */
 static void
 help(void *foo)
 {
@@ -208,38 +210,35 @@ help(void *foo)
 
 	switch(state) {
 	case 0:
-		iprintf("Special cmds:\n");
-		cmd_ptr = command_table_base;
-		while(cmd_ptr->f) {
+		iprintf("Special cmds <cmd name>\n");
+		iprintf("---------\n");
+
+		for(cmd_ptr=command_table_base; cmd_ptr->f; cmd_ptr++)
 			iprintf("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
-			cmd_ptr++;
-		}
 		/* Ugly: pause print for a moment to avoid UART buffer overflow */
 		state++;
-		ctimer_set(&ct, CLOCK_SECOND/100, help, NULL);
+		ctimer_set(&ct, CLOCK_SECOND/4, help, NULL);
 	break;
 
 	case 1:
+		iprintf("Register fields <cmd name addr bits>\n");
 		iprintf("---------\n");
-		iprintf("register field cmds <cmd name width(bits)>:\n");
 		for(fp=field_list; fp->name; fp++)
-			iprintf("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
+			iprintf("%c\t%s 0x%02X %hu\n", fp->ch, fp->name, fp->addr, fp->msb - fp->lsb +1);
 
 		/* Ugly pause */
 		state++;
-		ctimer_set(&ct, CLOCK_SECOND/100, help, NULL);
+		ctimer_set(&ct, CLOCK_SECOND/4, help, NULL);
 		break;
 
 	case 2:
+		iprintf("User variables <cmd name bytes>\n");
 		iprintf("---------\n");
-		iprintf("User variables <Cmd\tVariable Width>:\n");
-		for(vp=user_vars;vp->ch != '\0';vp++) {
+		for(vp=user_vars; vp->ch != '\0'; vp++)
 			iprintf("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
-		}
 
 		state = 0;
-	default:
-		;
+	default:;
 	}
 }
 
