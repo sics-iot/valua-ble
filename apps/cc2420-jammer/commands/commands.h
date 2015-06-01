@@ -1,5 +1,5 @@
-#ifndef COMMANDS
-#define COMMANDS
+#ifndef __COMMANDS__
+#define __COMMANDS__
 
 // Field mask, generated from MSB and LSB. E.g. FM(4,0)=0x000F, FM(5,1)=0x001E
 #define FM(MSB, LSB) \
@@ -13,21 +13,21 @@
 #define SETFV(REGVAL, FV, MSB, LSB) \
 	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
 
-extern long int sum_rssi;
-extern long unsigned sum_lqi;
-extern int min_rssi, max_rssi;
-extern unsigned min_lqi, max_lqi;
-/* extern uint8_t hex_seq[]; */
+struct command
+{
+	const char ch;
+	const char *name;
+	void (*f)(void);
+};
 
-unsigned getreg(enum cc2420_register regname);
-void setreg(enum cc2420_register regname, unsigned value);
-uint16_t cc2420_get_frequency(void);
-int cc2420_set_frequency(uint16_t f);
-
-void do_command(char *cmd);
-void commands_set_callback(void (*f)(int));
-void var_update(char op, char var);
-void field_update(char c, char op);
+struct field
+{
+	char ch;
+	const char *name;
+	uint8_t addr;
+	unsigned msb;
+	unsigned lsb;
+};
 
 // User-adjustable variable (non-negative integer type)
 union number {
@@ -46,18 +46,12 @@ struct variable
 	unsigned ceiling;
 };
 
-#define OP(n, op)\
-				switch(op) {\
- 				case '+':	n += 1;	break;\
-				case '-': n -= 1;	break;\
- 				case '*': n *= 10;	break;\
- 				case '/': n /= 10;	break;\
- 				case '>': n <<= 1;	break;\
- 				case '<': n >>= 1;	break;\
- 				case '^': n += 10;	break;\
- 				case '\'': n -= 10;	break;\
-				default:;\
-				}
-#endif
+void do_command(char *cmd);
+void commands_init(void (*dialpad)(int),
+                   unsigned (*getreg)(unsigned addr),
+                   void (*setreg)(unsigned addr, unsigned val),
+                   const struct command *cmd_list,
+                   const struct field *flist,
+                   const struct variable *vars);
 
-void commands_set_user_vars(const struct variable *vars);
+#endif /*__COMMANDS__*/

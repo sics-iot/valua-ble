@@ -14,13 +14,8 @@
 #define LAST_MODE JAM
 #define NUM_MODES (LAST_MODE+1)
 
-extern volatile int jam_ena;
-extern const uint8_t jam_data[6];
-
 int cc2420_set_frequency(uint16_t f);
 uint16_t cc2420_get_frequency(void);
-unsigned getreg(enum cc2420_register regname);
-void setreg(enum cc2420_register regname, unsigned value);
 void strobe(enum cc2420_register regname);
 unsigned int status(void);
 void flushrx(void);

@@ -52,7 +52,7 @@
 #include "net/rime/rimestats.h"
 #include "net/netstack.h"
 
-#include "cc2420-jammer.h"
+/* #include "cc2420-jammer.h" */
 
 #define WITH_SEND_CCA 0
 
@@ -263,7 +263,7 @@ static void RELEASE_LOCK(void) {
   locked--;
 }
 /*---------------------------------------------------------------------------*/
-unsigned
+static unsigned
 getreg(enum cc2420_register regname)
 {
   unsigned reg;
@@ -271,7 +271,7 @@ getreg(enum cc2420_register regname)
   return reg;
 }
 /*---------------------------------------------------------------------------*/
-void
+static void
 setreg(enum cc2420_register regname, unsigned value)
 {
   CC2420_WRITE_REG(regname, value);
