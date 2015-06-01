@@ -110,16 +110,16 @@ static uint8_t tx_addr[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
 static uint8_t rx_addr_p0[5] = {0x55, 0xAA, 0x56, 0xAB, 0x5A};
 struct radio_driver *radio;
 
-static uint8_t
-getreg(uint8_t addr)
+static unsigned
+getreg(unsigned addr)
 {
-	return csi00_read(addr);
+	return csi00_read((uint8_t)addr);
 }
 
 static void
-setreg(uint8_t addr, uint8_t val)
+setreg(unsigned addr, unsigned val)
 {
-	csi00_write(0x20 | addr, val);
+	csi00_write(0x20 | (uint8_t)addr, (uint8_t)val);
 }
 
 static void

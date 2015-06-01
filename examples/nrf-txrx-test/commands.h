@@ -1,6 +1,18 @@
 #ifndef __COMMANDS__
 #define __COMMANDS__
 
+// Field mask, generated from MSB and LSB. E.g. FM(4,0)=0x000F, FM(5,1)=0x001E
+#define FM(MSB, LSB) \
+	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
+
+// Field value, extracted from register value, MSB and LSB
+#define FV(REGVAL, MSB, LSB) \
+	((REGVAL & FM(MSB, LSB)) >> LSB)
+
+// Register value, with updated field
+#define SETFV(REGVAL, FV, MSB, LSB) \
+	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
+
 struct command
 {
 	const char ch;
@@ -36,8 +48,8 @@ struct variable
 
 void do_command(char *cmd);
 void commands_init(void (*dialpad)(int),
-                   uint8_t (*getreg)(uint8_t addr),
-                   void (*setreg)(uint8_t addr, uint8_t val),
+                   unsigned (*getreg)(unsigned addr),
+                   void (*setreg)(unsigned addr, unsigned val),
                    const struct command *cmd_list,
                    const struct field *flist,
                    const struct variable *vars);
