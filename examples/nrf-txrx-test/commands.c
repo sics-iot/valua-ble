@@ -5,24 +5,18 @@
 
 #include "commands.h"
 
+#if TARGET!=nrf-beacon
+#define PRINTF(...) printf(__VA_ARGS__)
+#else
+#define PRINTF(...) iprintf(__VA_ARGS__)
+#endif
+
 static const struct variable *user_vars;
 static const struct field *field_list;
 static const struct command *command_table_base;
 static void (*_dialpad)(int v);
-static uint8_t (*_getreg)(uint8_t addr);
-static void (*_setreg)(uint8_t addr, uint8_t val);
-
-// Field mask, generated from MSB and LSB. E.g. FM(4,0)=0x000F, FM(5,1)=0x001E
-#define FM(MSB, LSB) \
-	(((0x0001<<(MSB - LSB +1)) - 1) << LSB) // 2 ^ nbits - 1, then left shift
-
-// Field value, extracted from register value, MSB and LSB
-#define FV(REGVAL, MSB, LSB) \
-	((REGVAL & FM(MSB, LSB)) >> LSB)
-
-// Register value, with updated field
-#define SETFV(REGVAL, FV, MSB, LSB) \
-	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
+static unsigned (*_getreg)(unsigned addr);
+static void (*_setreg)(unsigned addr, unsigned val);
 
 #define OP(n, op)\
 				switch(op) {\
@@ -38,8 +32,8 @@ static void (*_setreg)(uint8_t addr, uint8_t val);
 				}
 /*---------------------------------------------------------------------------*/
 void commands_init(void (*dialpad)(int),
-                   uint8_t (*getreg)(uint8_t addr),
-                   void (*setreg)(uint8_t addr, uint8_t val),
+                   unsigned (*getreg)(unsigned addr),
+                   void (*setreg)(unsigned addr, unsigned val),
                    const struct command *cmd_list,
                    const struct field *flist,
                    const struct variable *vars)
@@ -51,7 +45,7 @@ void commands_init(void (*dialpad)(int),
 	field_list = flist;
 	user_vars = vars;
 
-	iprintf("press h for command list\n");
+	PRINTF("press h for command list\n");
 }
 
 /*-----------------------------------------------------------------------------*/ 
@@ -74,7 +68,7 @@ field_update(char c, char op)
 				_setreg(fp->addr, reg);
 				fv = FV(_getreg(fp->addr), fp->msb, fp->lsb);
 			}
-			iprintf("%s=%u\n", fp->name, fv);
+			PRINTF("%s=%u\n", fp->name, fv);
 			return;
 		}
 	}
@@ -97,19 +91,19 @@ var_update(char op, char var)
 				u8 = &(vp->n->u8);
 				OP(*u8, op);
 				*u8 = (*u8) % (vp->ceiling - vp->floor + 1);
-				iprintf("%s=%u\n", vp->long_name, *u8);
+				PRINTF("%s=%u\n", vp->long_name, *u8);
 				break;
 			case 2:
 				u16 = &(vp->n->u16);
 				OP(*u16, op);
 				*u16 = (*u16) % (vp->ceiling - vp->floor + 1);
-				iprintf("%s=%u\n", vp->long_name, *u16);
+				PRINTF("%s=%u\n", vp->long_name, *u16);
 				break;
 			case 4:
 				u32 = &(vp->n->u32);
 				OP(*u32, op);
 				*u32 = (*u32) % (vp->ceiling - vp->floor + 1);
-				iprintf("%s=%lu\n", vp->long_name, *u32);
+				PRINTF("%s=%lu\n", vp->long_name, *u32);
 				break;
 			default:;
 			}
@@ -142,7 +136,7 @@ var_update(char op, char var)
 
 /* 	for (addr = CC2420_MAIN;addr <= CC2420_RESERVED;addr++) { */
 /* 		reg = getreg(addr); */
-/* 		iprintf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
+/* 		PRINTF("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
 /* 	} */
 /* } */
 
@@ -189,12 +183,12 @@ exec_command(char c)
 /* 	addr = hexstr_to_unsigned(hex_str); */
 /*   if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) { */
 /* 		reg = getreg(addr); */
-/* 		iprintf("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
+/* 		PRINTF("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
 /* 	} else if(addr < CC2420_foo) { */
-/* 		iprintf("Strobe 0x%02X\n", addr); */
+/* 		PRINTF("Strobe 0x%02X\n", addr); */
 /* 		CC2420_STROBE(addr); */
 /* 	} else { */
-/* 		iprintf("Unknown register: 0x%s\n", hex_str); */
+/* 		PRINTF("Unknown register: 0x%s\n", hex_str); */
 /* 	} */
 /* } */
 static void
@@ -208,10 +202,10 @@ help(void *foo)
 
 	switch(state) {
 	case 0:
-		iprintf("Special cmds:\n");
+		PRINTF("Special cmds:\n");
 		cmd_ptr = command_table_base;
 		while(cmd_ptr->f) {
-			iprintf("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
+			PRINTF("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
 			cmd_ptr++;
 		}
 		/* Ugly: pause print for a moment to avoid UART buffer overflow */
@@ -220,10 +214,10 @@ help(void *foo)
 	break;
 
 	case 1:
-		iprintf("---------\n");
-		iprintf("register field cmds <cmd name width(bits)>:\n");
+		PRINTF("---------\n");
+		PRINTF("register field cmds <cmd name width(bits)>:\n");
 		for(fp=field_list; fp->name; fp++)
-			iprintf("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
+			PRINTF("%c\t%s %u\n", fp->ch, fp->name, fp->msb - fp->lsb +1);
 
 		/* Ugly pause */
 		state++;
@@ -231,10 +225,10 @@ help(void *foo)
 		break;
 
 	case 2:
-		iprintf("---------\n");
-		iprintf("User variables <Cmd\tVariable Width>:\n");
+		PRINTF("---------\n");
+		PRINTF("User variables <Cmd\tVariable Width>:\n");
 		for(vp=user_vars;vp->ch != '\0';vp++) {
-			iprintf("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
+			PRINTF("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
 		}
 
 		state = 0;
