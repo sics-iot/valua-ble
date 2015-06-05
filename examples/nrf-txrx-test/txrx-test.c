@@ -366,7 +366,7 @@ status(void)
 }
 
 /*---------------------------------------------------------------------------*/
-static const struct command command_table[] =	{
+static const struct command cmd_list[] =	{
 	{'e', "Reboot", watchdog_reboot},
 	{'+', "Channel+", channel_up},
 	{'-', "Channel-", channel_down},
@@ -378,20 +378,17 @@ static const struct command command_table[] =	{
 	/* {'R', "Read TXFIFO", read_tx_fifo}, */
 	/* {'W', "Write TXFIFO", write_tx_fifo}, */
 	/* {'F', "Read RXFIFO", read_rx_fifo} */
-	{'\0', "", NULL},
 };
 
 const static struct field field_list[] = {
 	{'w', "RF_PWR", RF_SETUP, 2, 1},
-	{'\0', NULL, 0x00, 0, 0},
 };
 
 /* user variables modifiable by serial commands */
-static struct variable const user_variable_list[] = {
+static struct variable const variable_list[] = {
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 32},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
-	{'\0', NULL, 0, NULL, -1, -1}
 };
 
 /*-----------------------------------------------------------------------------*/
@@ -423,7 +420,7 @@ PROCESS_THREAD(txrx_process, ev, data)
 	start_mode(PD);
 
 	/* Set serial commands: user callbacks and user data structures */
-	commands_init(start_mode, getreg, setreg, command_table, field_list, user_variable_list);
+	commands_init(start_mode, getreg, setreg, cmd_list, sizeof(cmd_list) / sizeof(cmd_list[0]), field_list, sizeof(field_list) / sizeof(field_list[0]), variable_list, sizeof(variable_list) / sizeof(variable_list[0]));
 
 	while(1) {
 		PROCESS_WAIT_EVENT();

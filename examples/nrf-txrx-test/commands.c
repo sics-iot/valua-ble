@@ -1,19 +1,61 @@
+/*
+ * Copyright (c) 2015, SICS Swedish ICT.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the Institute nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ */
+
+/**
+ * \addtogroup serial-debug
+ * @{
+ */
+
+/**
+ * \file
+ *         Debugging commands using the serial-line facility
+ * \author
+ *         Zhitao He <zhitao@sics.se>
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
 #include "contiki.h"
-
 #include "commands.h"
 
-#if TARGET!=nrf-beacon
+#if !CONTIKI_TARGET_NRF_BEACON
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
 #define PRINTF(...) iprintf(__VA_ARGS__)
 #endif
 
-static const struct variable *user_vars;
-static const struct field *field_list;
-static const struct command *command_table_base;
+static const struct variable *_var_list;
+static const struct field *_fd_list;
+static const struct command *_cmd_list;
+static int _cmd_list_len, _fd_list_len, _var_list_len;
 static void (*_dialpad)(int v);
 static unsigned (*_getreg)(unsigned addr);
 static void (*_setreg)(unsigned addr, unsigned val);
@@ -31,84 +73,87 @@ static void (*_setreg)(unsigned addr, unsigned val);
 				default:;\
 				}
 /*---------------------------------------------------------------------------*/
-void commands_init(void (*dialpad)(int),
-                   unsigned (*getreg)(unsigned addr),
-                   void (*setreg)(unsigned addr, unsigned val),
-                   const struct command *cmd_list,
-                   const struct field *flist,
-                   const struct variable *vars)
+void
+commands_init(void (*dialpad)(int),
+              unsigned (*getreg)(unsigned addr),
+              void (*setreg)(unsigned addr, unsigned val),
+              const struct command *cmd_list, int cmd_list_len,
+              const struct field *fd_list, int fd_list_len,
+              const struct variable *var_list, int var_list_len)
 {
 	_dialpad = dialpad;
 	_getreg = getreg;
 	_setreg = setreg;
-	command_table_base = cmd_list;
-	field_list = flist;
-	user_vars = vars;
+	_cmd_list = cmd_list;
+	_cmd_list_len = cmd_list_len;
+	_fd_list = fd_list;
+	_fd_list_len = fd_list_len;
+	_var_list = var_list;
+	_var_list_len = var_list_len;
 
 	PRINTF("press h for command list\n");
 }
-
 /*-----------------------------------------------------------------------------*/ 
 /* Generic 8-bit register field update operations */
 static void
 field_update(char c, char op)
 {
-	const struct field *fp;
 	unsigned reg, fv;
+	int i;
 
-	for(fp=field_list; fp->ch; fp++) {
-		if(fp->ch == c) {
-			reg = _getreg(fp->addr);
-			fv = FV(reg, fp->msb, fp->lsb);
-			/* skip update when no op */
-			if(op != c) {
-				OP(fv, op);
-				fv = fv % (0x1<<(fp->msb - fp->lsb +1));
-				reg = SETFV(reg, fv, fp->msb, fp->lsb);
-				_setreg(fp->addr, reg);
-				fv = FV(_getreg(fp->addr), fp->msb, fp->lsb);
+	if(_fd_list && _fd_list_len) {
+		for(i = 0; i < _fd_list_len; i++) {
+			if(_fd_list[i].ch == c) {
+				reg = _getreg(_fd_list[i].addr);
+				fv = FV(reg, _fd_list[i].msb, _fd_list[i].lsb);
+				/* skip update when no op */
+				if(op != c) {
+					OP(fv, op);
+					fv = fv % (0x1<<(_fd_list[i].msb - _fd_list[i].lsb +1));
+					reg = SETFV(reg, fv, _fd_list[i].msb, _fd_list[i].lsb);
+					_setreg(_fd_list[i].addr, reg);
+					fv = FV(_getreg(_fd_list[i].addr), _fd_list[i].msb, _fd_list[i].lsb);
+				}
+				PRINTF("%s=%u\n", _fd_list[i].name, fv);
+				return;
 			}
-			PRINTF("%s=%u\n", fp->name, fv);
-			return;
 		}
 	}
 }
-
+/*-----------------------------------------------------------------------------*/
 static void
 var_update(char op, char var)
 {
-	if(!user_vars) return;
-
-	const struct variable *vp = user_vars;
 	uint8_t *u8;
 	uint16_t *u16;
 	uint32_t *u32;
 
-	while(vp->ch != '\0') {
-		if(vp->ch == var) {
-			switch(vp->width) {
-			case 1:
-				u8 = &(vp->n->u8);
-				OP(*u8, op);
-				*u8 = (*u8) % (vp->ceiling - vp->floor + 1);
-				PRINTF("%s=%u\n", vp->long_name, *u8);
-				break;
-			case 2:
-				u16 = &(vp->n->u16);
-				OP(*u16, op);
-				*u16 = (*u16) % (vp->ceiling - vp->floor + 1);
-				PRINTF("%s=%u\n", vp->long_name, *u16);
-				break;
-			case 4:
-				u32 = &(vp->n->u32);
-				OP(*u32, op);
-				*u32 = (*u32) % (vp->ceiling - vp->floor + 1);
-				PRINTF("%s=%lu\n", vp->long_name, *u32);
-				break;
-			default:;
+	if(_var_list && _var_list_len) {
+		for(int i = 0; i < _var_list_len; i++) {
+			if(_var_list[i].ch == var) {
+				switch(_var_list[i].width) {
+				case 1:
+					u8 = &(_var_list[i].n->u8);
+					OP(*u8, op);
+					*u8 = (*u8) % (_var_list[i].ceiling - _var_list[i].floor + 1);
+					PRINTF("%s=%u\n", _var_list[i].long_name, *u8);
+					return;
+				case 2:
+					u16 = &(_var_list[i].n->u16);
+					OP(*u16, op);
+					*u16 = (*u16) % (_var_list[i].ceiling - _var_list[i].floor + 1);
+					PRINTF("%s=%u\n", _var_list[i].long_name, *u16);
+					return;
+				case 4:
+					u32 = &(_var_list[i].n->u32);
+					OP(*u32, op);
+					*u32 = (*u32) % (_var_list[i].ceiling - _var_list[i].floor + 1);
+					PRINTF("%s=%lu\n", _var_list[i].long_name, *u32);
+					return;
+				default:;
+				}
 			}
 		}
-		vp++;
 	}
 }
 /*---------------------------------------------------------------------------*/
@@ -139,25 +184,20 @@ var_update(char op, char var)
 /* 		PRINTF("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
 /* 	} */
 /* } */
-
 /*-----------------------------------------------------------------------------*/
 static void
 exec_command(char c)
 {
-	if(command_table_base) {
-		const struct command *cmd_ptr = command_table_base;
-		while(cmd_ptr->f) {
-			if(c == cmd_ptr->ch) {
-				cmd_ptr->f();
+	if(_cmd_list && _cmd_list_len) {
+		for(int i = 0; i < _cmd_list_len; i++) {
+			if(c == _cmd_list[i].ch) {
+				_cmd_list[i].f();
 				return;
 			}
-			cmd_ptr++;
 		}
-		// error: no such command
 	}
-	// error: command table not set
 }
-
+/*-----------------------------------------------------------------------------*/
 /* static unsigned */
 /* hexstr_to_unsigned(const char *s) */
 /* { */
@@ -172,7 +212,7 @@ exec_command(char c)
 
 /* 	return n; */
 /* } */
-
+/*-----------------------------------------------------------------------------*/
 /* static void */
 /* print_reg(const char* hex_str) */
 /* { */
@@ -191,51 +231,56 @@ exec_command(char c)
 /* 		PRINTF("Unknown register: 0x%s\n", hex_str); */
 /* 	} */
 /* } */
-
-/* Print commands */
+/*-----------------------------------------------------------------------------*/
 static void
 help(void *foo)
 {
 	static struct ctimer ct;
 	static int state = 0;
-	const struct command *cmd_ptr;
-	const struct field *fp;
-	const struct variable *vp;
+	int i;
 
 	switch(state) {
 	case 0:
-		PRINTF("Special cmds <cmd name>\n");
-		PRINTF("---------\n");
-
-		for(cmd_ptr=command_table_base; cmd_ptr->f; cmd_ptr++)
-			PRINTF("%c\t%s\n", cmd_ptr->ch, cmd_ptr->name);
+		if(_cmd_list && _cmd_list_len) {
+			PRINTF("Special cmds <cmd name>\n");
+			for(i = 0; i < _cmd_list_len; i++) {
+				PRINTF("%c\t%s\n", _cmd_list[i].ch, _cmd_list[i].name);
+			}
+		}
 		/* Ugly: pause print for a moment to avoid UART buffer overflow */
 		state++;
-		ctimer_set(&ct, CLOCK_SECOND/4, help, NULL);
+		ctimer_set(&ct, CLOCK_SECOND/100, help, NULL);
 	break;
 
 	case 1:
-		PRINTF("Register fields <cmd name addr bits>\n");
+		if(_fd_list && _fd_list_len) {
 		PRINTF("---------\n");
-		for(fp=field_list; fp->name; fp++)
-			PRINTF("%c\t%s 0x%02X %hu\n", fp->ch, fp->name, fp->addr, fp->msb - fp->lsb +1);
+		PRINTF("Register field cmds <cmd name bits>:\n");
+			for(i = 0; i < _fd_list_len; i++) {
+			PRINTF("%c\t%s %u\n", _fd_list[i].ch, _fd_list[i].name, _fd_list[i].msb - _fd_list[i].lsb +1);
+			}
+		}
 
 		/* Ugly pause */
 		state++;
-		ctimer_set(&ct, CLOCK_SECOND/4, help, NULL);
+		ctimer_set(&ct, CLOCK_SECOND/100, help, NULL);
 		break;
 
 	case 2:
-		PRINTF("User variables <cmd name bytes>\n");
-		PRINTF("---------\n");
-		for(vp=user_vars; vp->ch != '\0'; vp++)
-			PRINTF("%c\t%s %d\n", vp->ch, vp->long_name, vp->width);
+		if(_var_list && _var_list_len) {
+			PRINTF("---------\n");
+			PRINTF("User variables <cmd variable bytes>:\n");
+			for(i = 0; i < _var_list_len; i++) {
+				PRINTF("%c\t%s %d\n", _var_list[i].ch, _var_list[i].long_name, _var_list[i].width);
+			}
+		}
 
 		state = 0;
-	default:;
+	default:
+		;
 	}
 }
-
+/*-----------------------------------------------------------------------------*/
 void
 do_command(char *s)
 {
@@ -267,3 +312,5 @@ do_command(char *s)
 	/* else if(s[0]=='x') {print_reg(&s[1]);} */
 	}
 }
+/*-----------------------------------------------------------------------------*/
+/** @} */
