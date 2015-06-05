@@ -152,7 +152,7 @@ static int droplet_index;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
-static struct variable const user_variable_list[] = {
+static struct variable const variable_list[] = {
 	{'l', (union number*)&len_hdr, sizeof(len_hdr), "len_hdr", 0, 127},
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
@@ -161,7 +161,6 @@ static struct variable const user_variable_list[] = {
 	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
 	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
 	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
-	{'\0', NULL, 0, NULL, -1, -1},
 };
 
 const static struct field field_list[] = {
@@ -217,7 +216,6 @@ const static struct field field_list[] = {
 	{'u', "TX_TURNAROUND", CC2420_TXCTRL, 13, 13}, 
 	//Number of consecutive reference clock periods with successful synchronisation windows required to indicate lock: 64, 128, 256, 512
 	{'o', "LOCK_THR[1:0]", CC2420_FSCTRL, 15, 14}, 
-	{'\0', NULL, 0, 0, 0}, 
 };
 
 PROCESS(test_process, "CC2420 jammer");
@@ -1027,7 +1025,7 @@ battery_level(void)
 	setreg(CC2420_BATTMON, SETFV(reg, lv_orig, 4, 0)); // restore original monitor level
 }
 
-static const struct command command_table[] =    {
+static const struct command cmd_list[] =    {
  {'e', "Reboot", reboot},
  {'w', "TX power level", view_tx_power_level},
  {'u', "TX power+", power_up},
@@ -1048,7 +1046,6 @@ static const struct command command_table[] =    {
  {'R', "Read TXFIFO", read_tx_fifo},
  {'W', "Write TXFIFO", write_tx_fifo},
  {'F', "Read RXFIFO", read_rx_fifo},
- {'\0', NULL, NULL}
 };
 
 void
@@ -1078,7 +1075,7 @@ PROCESS_THREAD(test_process, ev, data)
 	// set CC2420 packet reception callback
 	cc2420_set_rx_callback(&packet_input);
 
-	commands_init(start_mode, getreg, setreg, command_table, field_list, user_variable_list);
+	commands_init(start_mode, getreg, setreg, cmd_list, sizeof(cmd_list) / sizeof(cmd_list[0]), field_list, sizeof(field_list) / sizeof(field_list[0]), variable_list, sizeof(variable_list) / sizeof(variable_list[0]));
 
 	button_sensor.configure(SENSORS_ACTIVE, 1);
 
