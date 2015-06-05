@@ -29,7 +29,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \author Zhitao He <zhitao@sics.se>
+ * \author Zhitao He <zhitao@sics.se>, Gurinder Singh Gill <gsgill112@gmail.com>
  */
 
 #ifndef CSI00_H__
@@ -43,15 +43,40 @@ uint16_t csi00_buf_len;
 
 /* extern int (*csi00_input_handler)(unsigned char c); */
 
+/*
+ *  Initialization of the SPI Module
+ */
 void csi00_init(void);
 /* void csi00_set_input(int (*input)(unsigned char c)); */
+
+/*
+ *  Send one byte data over SPI bus
+ */
 uint8_t csi00_strobe(uint8_t cmd);
+
+/*
+ *  Read one byte of data from SPI bus
+ */
 uint8_t csi00_read(uint8_t addr);
+
+/*
+ * Write a byte of data on SPI bus
+ */
 void csi00_write(uint8_t addr, uint8_t val);
-//uint8_t csi00_cmd(uint8_t cmd);
+
+/*
+ * Transfer function for reading and Writing multiple bytes of data --Modification needed--
+ */
 uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len);
-void
-csi00_write_message(uint8_t addr, uint8_t *buf, uint8_t len);
-int
-csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len);
+
+/*
+ * Write multiple bytes of data on SPI bus
+ */
+void csi00_write_message(uint8_t addr, uint8_t *buf, uint8_t len);
+
+/*
+ * Read multiple bytes of data from SPI bus
+ */
+int csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len);
+
 #endif /* CSI00_H__ */
