@@ -88,13 +88,27 @@ struct variable
 	unsigned ceiling;
 };
 
+
+/**
+ * \brief      Run a serial debug command.
+ * \param cmd A string
+ *
+ *             This function runs a pre-defined user command
+ *             after receiving a single-character or two-character string from the serial port
+ */
 void do_command(char *cmd);
+
 /**
  * \brief      Initialize the serial debug commands.
  * \param dialpad A user function taking a single digit number (0~9) as its parameter.
  * \param getreg A user function that returns a register's value, given its address.
  * \param setreg A user function that sets a register's value, given its address.
  * \param cmd_list A pointer to an array of command structures
+ * \param cmd_list_len Size of the array of command structures
+ * \param fd_list A pointer to an array of register fields
+ * \param fd_list_len Size of the array of register fields
+ * \param var_list A pointer to an array of user variables
+ * \param var_list_len Size of the array of user variables
  *
  *             This function initializes the serial debug commands
  *             with a set of user defined callback functions and data structures
