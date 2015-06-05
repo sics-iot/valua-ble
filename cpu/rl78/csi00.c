@@ -29,7 +29,7 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \author Zhitao He <zhitao@sics.se>
+ * \author Zhitao He <zhitao@sics.se>, Gurinder Singh Gill <gsgill112@gmail.com>
  */
 
 #include "stdio.h"
@@ -225,6 +225,7 @@ csi00_write_message(uint8_t addr, uint8_t *buf, uint8_t len)
 /*   Return char
  *   0            :             SUCESS
  *   <HEX>        :             Reg OUT
+ *   TODO - fix bugs in CSI00_tranfer_fn and add interrupt support to Tx function !
  */
 uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len){
 	uint8_t dummy_data;
@@ -232,7 +233,6 @@ uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len){
 	csi00_tx_addr = tx_buf;
 	csi00_rx_addr = rx_buf;
 	csi00_buf_len = data_len;
-	
 	//debug stmt 
 	#if 1
 	iprintf("0x%20X ; ",*csi00_tx_addr);	
