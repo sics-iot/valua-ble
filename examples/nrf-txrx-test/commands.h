@@ -55,6 +55,14 @@
 #define SETFV(REGVAL, FV, MSB, LSB) \
 	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
 
+/** \struct command
+ * \brief A special command issued by a single character
+ *
+ * if ch is 'h': display of all the commands, fields and registers.
+ * If ch is '0'~'9': the dialpad callback is run with the corresponding number as parameter.
+ * if ch is any other char: the user defined function f is run.
+ *
+ */
 struct command
 {
 	const char ch;
