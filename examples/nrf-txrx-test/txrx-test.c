@@ -280,16 +280,6 @@ PROCESS_THREAD(blink_process, ev, data)
 	PROCESS_END();
 }
 
-static int mode, last_mode;
-
-struct mode {
-	const char *display;
-	void (*handler)(void);
-	void (*prelog)(void);
-	void (*prolog)(void);
-	void (*et_handler)(void);
-};
-
 /* etimer expiration handler for TX mode */
 static void
 tx_et_handler(void)
@@ -317,6 +307,17 @@ tx_et_handler(void)
 	}
 }
 
+static int mode, last_mode;
+
+struct mode {
+	const char *display;
+	void (*handler)(void);
+	void (*prelog)(void);
+	void (*prolog)(void);
+	void (*et_handler)(void);
+};
+
+/* Radio modes */
 const static struct mode mode_list[] = {
 	{"Power down", pd_mode, NULL, NULL, NULL},
 	{"RX", rx_mode, NULL, NULL, NULL},
@@ -324,7 +325,8 @@ const static struct mode mode_list[] = {
 	{"TX broadcast", tx_mode, NULL, NULL, tx_et_handler},
 };
 
-void
+/* Switch to a new radio mode */
+static void
 start_mode(int new_mode)
 {
 	if (new_mode<0 || new_mode>=sizeof(mode_list) / sizeof(mode_list[0]))
@@ -366,6 +368,7 @@ status(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* List of special commands */
 static const struct command cmd_list[] =	{
 	{'e', "Reboot", watchdog_reboot},
 	{'+', "Channel+", channel_up},
@@ -380,11 +383,12 @@ static const struct command cmd_list[] =	{
 	/* {'F', "Read RXFIFO", read_rx_fifo} */
 };
 
+/* List of field commands */
 const static struct field field_list[] = {
 	{'w', "RF_PWR", RF_SETUP, 2, 1},
 };
 
-/* user variables modifiable by serial commands */
+/* List of user variable commands */
 static struct variable const variable_list[] = {
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 32},
@@ -396,11 +400,12 @@ static struct variable const variable_list[] = {
 static void
 et_handler(void)
 {
+	/* set next expiry time */
 	etimer_reset(&et);
+ /* call handler for current mode */
 	if (mode_list[mode].et_handler)
 		mode_list[mode].et_handler();
 }
-
 /*-----------------------------------------------------------------------------*/
 PROCESS_THREAD(txrx_process, ev, data)
 {
@@ -425,6 +430,7 @@ PROCESS_THREAD(txrx_process, ev, data)
 	while(1) {
 		PROCESS_WAIT_EVENT();
 		if (ev == PROCESS_EVENT_POLL) {
+			/* packet received */
 			int i;
 			int payload_len = radio->read(rx_buf, sizeof(rx_buf));
 			iprintf("received (%hu): 0x", payload_len);
@@ -433,10 +439,13 @@ PROCESS_THREAD(txrx_process, ev, data)
 			}
 			iprintf("\n");
 		} else if (ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
+			/* call etimer expiry handler */
 			et_handler();
 		} else	if (ev == sensors_event && data == &button_sensor) {
+			/* display help message about debug commands */
 			do_command("h");
 		} else if (ev == serial_line_event_message) {
+			/* execute debug command */
 			do_command((char *)data);
 		}
 	}
