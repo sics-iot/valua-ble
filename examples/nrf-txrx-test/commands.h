@@ -56,12 +56,11 @@
 	((REGVAL & ~FM(MSB, LSB)) | FV << LSB)
 
 /** \struct command
- * \brief A special command issued by a single character
+ * \brief A special command is denoted and executed by a single character
  *
  * if ch is 'h': display of all the commands, fields and registers.
  * If ch is '0'~'9': the dialpad callback is run with the corresponding number as parameter.
- * if ch is any other char: the user defined function f is run.
- *
+ * if ch is another char: a matching callback function f is called.
  */
 struct command
 {
@@ -70,6 +69,21 @@ struct command
 	void (*f)(void);
 };
 
+/** \struct field
+ * \brief A register field command is denoted by a character
+ * and executed by a two-character string
+ *
+ * For example, a user can define a 'w' field command to access the two-bit
+ * "RF_PWR" field of the RF_SETUP register in the radio by specifying the register address
+ * and the MSB and LSB of the field. 
+ * 
+ * A set of sub-commands are then executable by thesetwo-charactor strings:
+ * "ww": displays the current value of RF_PWR
+ * "w+": increments RF_PWR by one
+ * "w-": decrements RF_PWR by one
+ * "w>": doubles RF_PWR
+ * "w<": halfs RF_PWR
+ */
 struct field
 {
 	char ch;
@@ -79,11 +93,29 @@ struct field
 	unsigned lsb;
 };
 
-// User-adjustable variable (non-negative integer type)
+/** \struct variable
+ * \brief A variable update command is denoted by a character
+ * and executed by a two-character string
+ *
+ * For example, a user can define a 'y' variable command to update a user variable
+ * "payload_len", an unsigned integer, by an arithmetic operation. 
+ * Specifying the variable's size in bytes as well as its floor and ceiling
+ * allows wrap-around to be performed correctly .
+
+ * "+y": payload_len + 1
+ * "-y": payload_len - 1
+ * "^y": payload_len + 10
+ * "\y": payload_len - 10
+ * ">y": payload_len * 2
+ * "<y": payload_len / 2
+ * "*y": payload_len * 10
+ * "/y": payload_len / 10
+ */
+/* An unsigned integer */
 union number {
-		uint8_t u8;
-		uint16_t u16;
-		uint32_t u32;
+	uint8_t u8;
+	uint16_t u16;
+	uint32_t u32;
 };
 
 struct variable
@@ -101,8 +133,8 @@ struct variable
  * \brief      Run a serial debug command.
  * \param cmd A string
  *
- *             This function runs a pre-defined user command
- *             after receiving a single-character or two-character string from the serial port
+ * This function runs a pre-defined user command
+ * after receiving a single-character or two-character string from the serial port
  */
 void do_command(char *cmd);
 
@@ -118,8 +150,8 @@ void do_command(char *cmd);
  * \param var_list A pointer to an array of user variables
  * \param var_list_len Size of the array of user variables
  *
- *             This function initializes the serial debug commands
- *             with a set of user defined callback functions and data structures
+ * This function initializes the serial debug commands
+ * with a set of user defined callback functions and data structures
  */
 void
 commands_init(void (*dialpad)(int),
@@ -130,3 +162,5 @@ commands_init(void (*dialpad)(int),
               const struct variable *var_list, int var_list_len);
 
 #endif /*__COMMANDS__*/
+/*-----------------------------------------------------------------------------*/
+/** @} */
