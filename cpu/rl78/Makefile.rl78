@@ -190,6 +190,8 @@ CONTIKI_SOURCEFILES += write.c
 CONTIKI_SOURCEFILES += assert.c
 #CONTIKI_SOURCEFILES += slip-arch.c
 CONTIKI_SOURCEFILES += watchdog.c
+CONTIKI_SOURCEFILES += csi00.c
+CONTIKI_SOURCEFILES += adc.c
 
 ### Compilation rules
 

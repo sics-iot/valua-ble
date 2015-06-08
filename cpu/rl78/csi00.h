@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Analog Devices, Inc.
+ * Copyright (c) 2015, SICS Swedish ICT.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,18 +29,54 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \author Ian Martin <martini@redwirellc.com>
+ * \author Zhitao He <zhitao@sics.se>, Gurinder Singh Gill <gsgill112@gmail.com>
  */
 
-#ifndef RL78_H
-#define RL78_H
+#ifndef CSI00_H__
+#define CSI00_H__
 
-#include <stdint.h>
+#include "stdint.h" // for uint8_t, uint16_6
 
-#include "sfrs.h"
-#include "sfrs-ext.h"
+uint8_t *csi00_tx_addr;
+uint8_t *csi00_rx_addr;
+uint16_t csi00_buf_len;
 
-typedef uint32_t clock_time_t;
-typedef unsigned short uip_stats_t;
+/* extern int (*csi00_input_handler)(unsigned char c); */
 
-#endif // RL78_H
+/*
+ *  Initialization of the SPI Module
+ */
+void csi00_init(void);
+/* void csi00_set_input(int (*input)(unsigned char c)); */
+
+/*
+ *  Send one byte data over SPI bus
+ */
+uint8_t csi00_strobe(uint8_t cmd);
+
+/*
+ *  Read one byte of data from SPI bus
+ */
+uint8_t csi00_read(uint8_t addr);
+
+/*
+ * Write a byte of data on SPI bus
+ */
+void csi00_write(uint8_t addr, uint8_t val);
+
+/*
+ * Transfer function for reading and Writing multiple bytes of data --Modification needed--
+ */
+uint8_t csi00_transfer(uint8_t *tx_buf, uint8_t *rx_buf, uint16_t data_len);
+
+/*
+ * Write multiple bytes of data on SPI bus
+ */
+void csi00_write_message(uint8_t addr, uint8_t *buf, uint8_t len);
+
+/*
+ * Read multiple bytes of data from SPI bus
+ */
+int csi00_read_message(uint8_t addr, uint8_t *buf, uint8_t len);
+
+#endif /* CSI00_H__ */

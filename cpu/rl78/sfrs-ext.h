@@ -357,6 +357,10 @@ struct ADM2struct {
 	unsigned char            : 1;
 	unsigned char  awc       : 1;
 	unsigned char  adrck     : 1;
+	unsigned char       : 1;
+	unsigned char  adrefm     : 1;
+	unsigned char  adrefp0     : 1;
+	unsigned char  adrefp1     : 1;
 };
 
 struct ADULstruct {
@@ -5286,5 +5290,8 @@ struct CRCDstruct {
 
 #define TCR (&TCR00)
 #define TMR (&TMR00)
+
+#define TSF00 (SSR00Lbits.bit6)
+#define BFF00 (SSR00Lbits.bit5)
 
 #endif // SFRS_EXT_H

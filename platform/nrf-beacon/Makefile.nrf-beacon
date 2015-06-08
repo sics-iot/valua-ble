@@ -53,10 +53,11 @@ CONTIKI_PLAT_DEFS =
 
 include $(CONTIKIRL78)/Makefile.rl78
 
-PROG_UART ?= /dev/ttyUSB1
+PROG ?= /dev/ttyUSB0
+MODE ?= 1
 
 run: $(CONTIKI_PROJECT).$(TARGET).srec
-	~/rl78flash/rl78flash -vv -i -m3 $(PROG_UART) -b500000 -a $<
+	rl78flash -vv -i -m$(MODE) $(PROG) -b500000 -a $<
 
 #MODULES+=core/net \
 #         core/net/mac core/net/mac/sicslowmac \

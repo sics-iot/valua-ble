@@ -52,6 +52,7 @@
 #include "uart2.h"
 #include "watchdog.h"
 #include "slip-arch.h"
+#include "csi00.h"
 
 #if __GNUC__
 #include "write.h"
@@ -82,13 +83,10 @@ main(int argc, char **argv)
 	asm ("di");
 	/* Setup clocks */
 	CMC = 0x00U;                                        /* Default value: use on-chip osc. as system clock */
-	//  CSC = 0x80U;                                        /* Start XT1 and HOCO, stop X1 */
 	MSTOP = 1U;			/* Stop X1 */
-	//  CKC = 0x00U;
-	MCM0 = 0U;
+	MCM0 = 0U; // select the high-speed on-chip oscillator clock (fIH) as the main system clock
 	clock_delay_usec(~0); // max value 65535
-	//  OSMC = 0x00;                                       /* Supply fsub to peripherals, including Interval Timer */
-	OSMC= 0x10U;
+	OSMC= 0x10U; // select fIH as the source of real-time clock and 12-bit interval timer
 
 	uart2_init();
 	asm ("ei");                                             /* Enable interrupts */
@@ -130,11 +128,9 @@ main(int argc, char **argv)
 	int i;
 	for (i=0;i<3;i++) {
 		LED1 = 0; // led on
-		/* delay_1sec(); */
-		clock_wait(CLOCK_SECOND);
+		clock_wait(CLOCK_SECOND / 4);
 		LED1 = 1; // led off
-		/* delay_1sec(); */
-		clock_wait(CLOCK_SECOND);
+		clock_wait(CLOCK_SECOND / 4);
 	}
 
 	/* crappy way of remembering and accessing argc/v */
@@ -149,15 +145,14 @@ main(int argc, char **argv)
 
 	uart2_set_input(serial_line_input_byte);
 	serial_line_init();
-
-	autostart_start(autostart_processes);
+	csi00_init();
 
 	iprintf("node_id = %hu\n", node_id);
 	iprintf("CPU frequency = %lu\n", f_CLK);
 
-	while(1) {
-		/* watchdog_periodic(); */
+	autostart_start(autostart_processes);
 
+	while(1) {
 		int r;
 		do {
 			/* Reset watchdog. */

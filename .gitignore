@@ -94,3 +94,7 @@ contiki-cc2530dk.lib
 *.eval-adf7xxxmb4z.srec
 *.nrf-beacon
 *.nrf-beacon.srec
+
+#cscope & ctags files
+cscope*
+tags

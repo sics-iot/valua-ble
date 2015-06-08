@@ -841,7 +841,12 @@ struct PM15struct {
 
 struct ADM0struct {
   unsigned char adce      : 1;
-  unsigned char : 1;
+  unsigned char lv0      : 1;
+  unsigned char lv1      : 1;
+  unsigned char fr0      : 1;
+  unsigned char fr1      : 1;
+  unsigned char fr2      : 1;
+  unsigned char admd      : 1;
   unsigned char adcs      : 1;
 };
 
@@ -3155,6 +3160,7 @@ struct PMCstruct {
 #define DMAIF0    (IF0Hbits.dmaif0)
 #define DMAIF1    (IF0Hbits.dmaif1)
 #define STIF0     (IF0Hbits.stif0)
+#define CSIIF00     (IF0Hbits.stif0)
 #define SRIF0     (IF0Hbits.srif0)
 #define TMIF01H   (IF0Hbits.tmif01h)
 #define SREIF0    (IF0Hbits.tmif01h)
@@ -3189,6 +3195,7 @@ struct PMCstruct {
 #define DMAMK0    (MK0Hbits.dmamk0)
 #define DMAMK1    (MK0Hbits.dmamk1)
 #define STMK0     (MK0Hbits.stmk0)
+#define CSIMK00     (MK0Hbits.stmk0)
 #define SRMK0     (MK0Hbits.srmk0)
 #define TMMK01H   (MK0Hbits.tmmk01h)
 #define SREMK0    (MK0Hbits.tmmk01h)
