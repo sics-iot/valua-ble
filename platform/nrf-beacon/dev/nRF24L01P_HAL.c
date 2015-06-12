@@ -49,7 +49,12 @@
 /**********************************************************************************************
  * CONSTANTS
  *********************************************************************************************/
-
+#define RX_PWRUP_STAT ((1 << RX_DR) | (1 << TX_DS) | (1 << MAX_RT))
+#define TX_PWRUP_STAT ((1 << RX_DR) | (0 << TX_DS) | (1 << MAX_RT))
+#define RX_PWRUP_CONF ((1 << PWR_UP) | (1 << PIRM_RX))
+#define TX_PWRUP_CONF ((1 << PWR_UP) | (0 << PRIM_RX))
+#define PWRDWN ((0 << PWR_UP) | (0 << PRIM_RX))
+#define NRF_RST_CONF ((0 << MASK_RX_DR) | (0 << MASK_TX_DR) | (0 << MASK_MAX_RT) | (0 << CRCO) | (0 << PWR_UP) | (0 << PRIM_RX) | (0 << EN_CRC))
 /**********************************************************************************************
  * Global VARIABLES
  *********************************************************************************************/
@@ -69,6 +74,21 @@ void nrf24_init(void){
 }
 
 /**********************************************************************************************
+ * @fn          nrf24_getStatus
+ * 
+ * @brief       Get the sataus of the radio 
+ * 
+ * @param       None
+ *  
+ * @return      returns the Status of radio in HEX
+ *********************************************************************************************/
+uint8_t nrf24_getStatus(void){
+	uint8_t status;
+	status = csi00_strobe(NOP);
+	return status;	
+}
+
+/**********************************************************************************************
  * @fn          nrf24_dataReady
  * 
  * @brief       Checks if data is available in Rx
@@ -79,7 +99,10 @@ void nrf24_init(void){
  *              0 : Data not Ready
  *********************************************************************************************/
 uint8_t nrf24_dataReady(void){
-
+	uint8_t status;
+	status = nrf24_getStatus();
+	if(status & (1 << RX_DR )) return 1;
+	else return 0;
 }
 
 /**********************************************************************************************
@@ -93,20 +116,10 @@ uint8_t nrf24_dataReady(void){
  *              0 : Radio is free 
  *********************************************************************************************/
 uint8_t nrf24_isSending(void){
-
-}
-
-/**********************************************************************************************
- * @fn          nrf24_getStatus
- * 
- * @brief       Get the sataus of the radio 
- * 
- * @param       None
- *  
- * @return      returns the Status of radio in HEX
- *********************************************************************************************/
-uint8_t nrf24_getStatus(void){
-
+	uint8_t status;
+	status = nrf24_getStatus();
+	if (status & ((1 << TX_DS) | (1 << MAX_RT))) return 1;
+	else return 0;
 }
 
 /**********************************************************************************************
@@ -116,11 +129,13 @@ uint8_t nrf24_getStatus(void){
  * 
  * @param       None
  *  
- * @return      0 : Rx FIFO is Empty
- *              1 : Rx FIFO is not Empty
+ * @return      1 : Rx FIFO is Empty
+ *              0 : Rx FIFO is not Empty
  *********************************************************************************************/
 uint8_t nrf24_rxFifoEmpty(void){
-
+	uint8_t fifoStat;
+	fifoStat = csi00_read(FIFO_STATUS);
+	return (fifoStat & (1 << RX_EMPTY));
 }
 
 /**********************************************************************************************
@@ -156,13 +171,19 @@ uint8_t nrf24_send(void *data, uint16_t len){
  * 
  * @brief       Enable or Disable Rx power 
  * 
- * @param       0 : Enable 
- *              1 : Disable 
+ * @param       1 : Enable 
+ *              0 : Disable 
  *  
  * @return      None
  *********************************************************************************************/
 void nrf24_rxPower(uint8_t EN){
-
+	if (EN == 1){
+		csi00_write(STATUS, RX_PWRUP_STAT);
+		csi00_write(CONFIG, RX_PWRUP_CONF);
+	}
+	else if (EN == 0){
+		csi00_write(CONFIG, PWRDWN);
+	}
 }
 
 /**********************************************************************************************
@@ -170,13 +191,19 @@ void nrf24_rxPower(uint8_t EN){
  * 
  * @brief       Enable or Disable Tx power
  * 
- * @param       0 : Enable
- *              1 : Disable
+ * @param       1 : Enable
+ *              0 : Disable
  *  
  * @return      None 
  *********************************************************************************************/
 void nrf24_txPower(uint8_t EN){
-
+	if (EN == 1){
+		csi00_write(STATUS, TX_PWRUP_STAT);
+		csi00_write(CONFIG, TX_PWRUP_CONF);
+	}
+	else if (EN == 0){
+		csi00_write(CONFIG, PWRDWN);
+	}
 }
 
 /**********************************************************************************************
