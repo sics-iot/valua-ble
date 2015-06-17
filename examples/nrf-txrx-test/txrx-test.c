@@ -31,6 +31,11 @@
  */
 
 /**
+ * \defgroup txrx-test nRF24L01+ broadcast TX/RX example
+ * @{
+ */
+
+/**
  * \file
  *         An example to demonstrate basic TX/RX of the nRF radio
  * \author
@@ -486,3 +491,4 @@ p0_handler(void)
 	}
  	PMK0 = 0;
 }
+/** @} */
