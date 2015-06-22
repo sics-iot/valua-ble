@@ -221,12 +221,12 @@ main(int argc, char **argv)
   if(!(node_mac[0] | node_mac[1] | node_mac[2] | node_mac[3] |
        node_mac[4] | node_mac[5] | node_mac[6] | node_mac[7])) {
 
-#ifdef SERIALNUM
-    if(!node_id) {
-      PRINTF("Node id is not set, using Z1 product ID\n");
-      node_id = SERIALNUM;
-    }
-#endif
+/* #ifdef SERIALNUM */
+/*     if(!node_id) { */
+/*       PRINTF("Node id is not set, using Z1 product ID\n"); */
+/*       node_id = SERIALNUM; */
+/*     } */
+/* #endif */
     node_mac[0] = 0xc1;  /* Hardcoded for Z1 */
     node_mac[1] = 0x0c;  /* Hardcoded for Revision C */
     node_mac[2] = 0x00;  /* Hardcoded to arbitrary even number so that
@@ -297,9 +297,9 @@ main(int argc, char **argv)
 
   leds_off(LEDS_ALL);
 
-#ifdef SERIALNUM
-  PRINTF("Ref ID: %u\n", SERIALNUM);
-#endif
+/* #ifdef SERIALNUM */
+/*   PRINTF("Ref ID: %u\n", SERIALNUM); */
+/* #endif */
   PRINTF(CONTIKI_VERSION_STRING " started. ");
 
   if(node_id) {
