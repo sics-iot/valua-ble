@@ -138,14 +138,16 @@ const static uint8_t all_zeros[128];
 /* const static uint8_t pellet[128] = {[80]=0x00, 0x00, 0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96}; */
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
 const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
+const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 82, 0xA7}; // glossy header: sfd + len byte + glossy app header nimble (0xA)
 
 const static struct hex_seq droplets[] =	{
-	{sfd_1z, sizeof(sfd_1z)},
+	/* {sfd_1z, sizeof(sfd_1z)}, */
 	{sfd_2z, sizeof(sfd_2z)},
 	{sfd_3z, sizeof(sfd_3z)},
 	{all_zeros, sizeof(all_zeros)},
 	{pellet, sizeof(pellet)},
-	{sfd_1z_packed, sizeof(sfd_1z_packed)}
+	{sfd_1z_packed, sizeof(sfd_1z_packed)},
+	{fake_glossy_header, sizeof(fake_glossy_header)}
 };
 
 static int droplet_index;
