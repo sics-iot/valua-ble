@@ -134,19 +134,18 @@ unsigned min_lqi = 108, max_lqi = 0;
 const static uint8_t sfd_1z[] = {0x06, 0xA7, 127};
 const static uint8_t sfd_2z[] = {0x00, 0xA7, 127};
 const static uint8_t sfd_3z[] = {0x06, 0x00, 0xA7, 127};
-const static uint8_t all_zeros[128];
-/* const static uint8_t pellet[128] = {[80]=0x00, 0x00, 0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96}; */
-const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
 const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
+const static uint8_t all_zeros[128];
+const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
 const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 82, 0xA7}; // glossy header: sfd + len byte + glossy app header nimble (0xA)
 
 const static struct hex_seq droplets[] =	{
+	/* {sfd_1z_packed, sizeof(sfd_1z_packed)}, */
 	/* {sfd_1z, sizeof(sfd_1z)}, */
 	{sfd_2z, sizeof(sfd_2z)},
 	{sfd_3z, sizeof(sfd_3z)},
-	{all_zeros, sizeof(all_zeros)},
+	/* {all_zeros, sizeof(all_zeros)}, */
 	{pellet, sizeof(pellet)},
-	{sfd_1z_packed, sizeof(sfd_1z_packed)},
 	{fake_glossy_header, sizeof(fake_glossy_header)}
 };
 
@@ -295,7 +294,8 @@ send_len_buf(struct rtimer *t, void *ptr)
 	if (ptr) {
 		/* Write empty frame to TX FIFO. */
 		// frame length is appended by a bogus byte that induces a minimal delay to the power-down of the TX circuit, thus avoiding corruption of transmitted frame length.
-		CC2420_WRITE_FIFO_BUF(&len_hdr, 2);
+		/* CC2420_WRITE_FIFO_BUF(&len_hdr, 2); */
+		CC2420_WRITE_FIFO_BUF(&(droplets[droplet_index].data), droplets[droplet_index].size +1);
 
 		/* Transmit */
 		strobe(CC2420_STXON);
@@ -383,7 +383,7 @@ inc_first_byte(uint8_t *src)
 }
 /*---------------------------------------------------------------------------*/
 static void
-stop_rtimer(int new_mode)
+stop_rtimer(void)
 {
 	rt.ptr = NULL; 		// stop rtimer
 }
@@ -414,8 +414,18 @@ off_mode(int new_mode)
 static void
 cs_mode(int new_mode)
 {
+	flushrx();
+	// enter reverse modulation mode to avoid packet decoding
+	do_command("P+");
 	strobe(CC2420_SRXON);
 	etimer_set(&et, CLOCK_SECOND / 1);
+}
+
+static void
+cs_prolog(void)
+{
+	// revert modulation mode
+	do_command("P-");
 }
 
 static void
@@ -647,8 +657,10 @@ cs_eth(void)
 	if (status() & BV(CC2420_RSSI_VALID)) {
 		rssi = (int)((signed char)getreg(CC2420_RSSI));
 		lna = getreg(CC2420_AGCCTRL) & 0x0003;
+		printf("rssi = %d, lna = %u\n", rssi, lna);
+	} else {
+		printf("rssi = ?, lna = ?\n");
 	}
-	printf("rssi = %d, lna = %u\n", rssi, lna);
 }
 
 static void
@@ -665,15 +677,15 @@ struct mode {
 	int mode;
 	const char *display;
 	void (*handler)(int mode);
-	void (*prelog)(int mode);
-	void (*prolog)(int mode);
+	void (*prelog)(void);
+	void (*prolog)(void);
 	void (*et_handler)(void);
 };
 
 const static struct mode mode_list[] = {
 	{RX, "RX", rx_mode, NULL, NULL, NULL},
 	{OFF, "OFF", off_mode, NULL, NULL, NULL},
-	{CH, "Channel sampling", cs_mode, NULL, NULL, cs_eth},
+	{CH, "Channel sampling", cs_mode, NULL, cs_prolog, cs_eth},
 	{UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, attack_eth},
 	{MOD, "Modulated carrier", mod_mode, stop_rtimer, NULL, attack_eth},
 	{TX, "TX broadcast", tx_mode, stop_rtimer, NULL, tx_eth},
@@ -687,16 +699,17 @@ const static struct mode mode_list[] = {
 void
 start_mode(int new_mode)
 {
-	static int last_mode;
+	static int last_mode_index;
 	const struct mode *p;
 	for (p=&mode_list[0];p->handler;p++) {
 		if(p->mode == new_mode) {
-			if(p->prelog) p->prelog(last_mode);
+			printf("last mode index %d\n", last_mode_index);
+			if(mode_list[last_mode_index].prolog) {putchar('#'); mode_list[last_mode_index].prolog();}
+			if(p->prelog) p->prelog();
 			reset_transmitter();
 			p->handler(new_mode);
-			last_mode = mode;
+			last_mode_index = p - mode_list;
 			mode = new_mode;
-			if(p->prolog) p->prolog(mode);
 			printf("%s mode\n", p->display);
 			return;
 		}
