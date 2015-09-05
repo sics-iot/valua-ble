@@ -137,7 +137,8 @@ const static uint8_t sfd_3z[] = {0x06, 0x00, 0xA7, 127};
 const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
 const static uint8_t all_zeros[128];
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
-const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 82, 0xA7}; // glossy header: sfd + len byte + glossy app header nimble (0xA)
+const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA7}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA)
+const static uint8_t glossy_data_pkt[] = {0x00, 0xA7, 13, 0xa3, 0x04, 0x00, 0x05, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!', 0x91, 0xEE}; // glossy hdr (4B) + src addr (2B) + dst addr (2B) + ? (1B) + usr payload ("Hi!") + crc16
 
 const static struct hex_seq droplets[] =	{
 	/* {sfd_1z_packed, sizeof(sfd_1z_packed)}, */
@@ -146,7 +147,8 @@ const static struct hex_seq droplets[] =	{
 	{sfd_3z, sizeof(sfd_3z)},
 	/* {all_zeros, sizeof(all_zeros)}, */
 	{pellet, sizeof(pellet)},
-	{fake_glossy_header, sizeof(fake_glossy_header)}
+	{fake_glossy_header, sizeof(fake_glossy_header)},
+	{glossy_data_pkt, sizeof(glossy_data_pkt)},
 };
 
 static int droplet_index;
@@ -590,21 +592,40 @@ tx_eth(void)
 		/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
 
 		/* Test: fill payload with SYNC header */
-#define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 )
-#define MOD_MODE_BIT 4
-#define MOD_MODE_BV (1<<MOD_MODE_BIT)
-		uint8_t sync_hdr[] = {0x00, 0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7
-		// In case in RP mode, reverse SYNC header back to normal mode
-		if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) {
-			for (i = 0;i < sizeof(sync_hdr);i++) {
-				sync_hdr[i] = REVERSE_PHASE(sync_hdr[i]);
-			}
-		};
-		memcpy(buf_ptr+payload_len-sizeof(sync_hdr), &sync_hdr[0], sizeof(sync_hdr));
-		/* pad(buf_ptr, payload_len, sync_hdr, sizeof(sync_hdr), NULL); */ // pad payload with SYNC headers
-		snprintf((char *)buf, sizeof(buf), "%u", seqno);
+/* #define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 ) */
+/* #define MOD_MODE_BIT 4 */
+/* #define MOD_MODE_BV (1<<MOD_MODE_BIT) */
+/* 		uint8_t sync_hdr[] = {0x00, 0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7 */
+/* 		// In case in RP mode, reverse SYNC header back to normal mode */
+/* 		if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) { */
+/* 			for (i = 0;i < sizeof(sync_hdr);i++) { */
+/* 				sync_hdr[i] = REVERSE_PHASE(sync_hdr[i]); */
+/* 			} */
+/* 		}; */
+/* 		memcpy(buf_ptr+payload_len-sizeof(sync_hdr), &sync_hdr[0], sizeof(sync_hdr)); */
+/* 		/\* pad(buf_ptr, payload_len, sync_hdr, sizeof(sync_hdr), NULL); *\/ // pad payload with SYNC headers */
+/* 		snprintf((char *)buf, sizeof(buf), "%u", seqno); */
+		/* errno = cc2420_driver.send(buf, payload_len); */
 
-		errno = cc2420_driver.send(buf, payload_len);
+		/* Test: set payload len to by glossy frame len, and fill payload with glossy app header, followed by user string */
+
+		/* payload_len = sizeof(glossy_data_pkt) - 5; */
+		/* memcpy(buf_ptr, &glossy_data_pkt[3], payload_len);  */
+		/* memcpy(buf_ptr, &glossy_data_pkt[3], payload_len);  */
+		char s[] = "Hi!";
+		payload_len = strlen(s);
+		memcpy(buf_ptr, s, payload_len); 
+		uint16_t checksum = crc16_data(buf_ptr, payload_len, 0);
+		printf("checksum = %4x\n", checksum);
+		buf_ptr[payload_len] = checksum & 0xFF;
+		buf_ptr[payload_len+1] = checksum >> 8;
+		print_hex_seq("tx packet: ", buf_ptr, payload_len+2);
+		// turn off AUTOCRC 
+		uint16_t reg = getreg(CC2420_MDMCTRL0);
+		reg &= ~AUTOCRC;
+		setreg(CC2420_MDMCTRL0, reg);
+		errno = cc2420_driver.send(buf, payload_len+2);
+
 		if (errno == RADIO_TX_OK) printf(". ");
 		else printf("cc2420_send error: %d\n", errno);
 		++seqno;
