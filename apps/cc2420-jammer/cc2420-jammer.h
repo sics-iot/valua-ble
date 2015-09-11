@@ -8,10 +8,11 @@
 #define UNMOD 4
 #define CH 5
 #define DRIZZLE 6
-#define OFF 7
+#define CAPSULE 7
 #define TX2 8
 #define JAM 9
-#define LAST_MODE JAM
+#define OFF 10
+#define LAST_MODE OFF
 #define NUM_MODES (LAST_MODE+1)
 
 int cc2420_set_frequency(uint16_t f);

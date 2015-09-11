@@ -55,6 +55,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <inttypes.h>
 
 #define DEBUG 1
@@ -70,6 +71,12 @@
     t0 = RTIMER_NOW();                                                  \
     while(!(cond) && RTIMER_CLOCK_LT(RTIMER_NOW(), t0 + (max_time)));   \
   } while(0)
+
+// 802.15.4 reverse-phased byte, obtained by flipping bit 7 and bit 3.
+#define RP_BYTE(byte) \
+	do { \
+		byte = ((byte) & 0x77) | ((~(byte)) & 0x88); \
+	} while(0)
 
 #define CHANNEL 20
 #define TXPOWER_LEVEL 3
@@ -111,6 +118,7 @@ static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
 static uint8_t len_hdr = 127;
+static uint8_t rp_en = 0;
 
 static struct etimer et;
 static struct rtimer rt;
@@ -137,8 +145,10 @@ const static uint8_t sfd_3z[] = {0x06, 0x00, 0xA7, 127};
 const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
 const static uint8_t all_zeros[128];
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
-const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA7}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA)
-const static uint8_t glossy_data_pkt[] = {0x00, 0xA7, 13, 0xa3, 0x04, 0x00, 0x05, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!', 0x91, 0xEE}; // glossy hdr (4B) + src addr (2B) + dst addr (2B) + ? (1B) + usr payload ("Hi!") + crc16
+const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA4}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
+const static uint8_t glossy_data_pkt[] = {0x00, 0xA7, 13, 0xA3, 0x04, 0x00, 0x05, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!', 0xB1, 0xA7}; // preamble + SFD + LEN + 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!") + crc16
+const static uint8_t glossy_sync_pkt[] = {0x00, 0xA7, 11, 0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00, 0x63, 0x2B}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
+const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 
 const static struct hex_seq droplets[] =	{
 	/* {sfd_1z_packed, sizeof(sfd_1z_packed)}, */
@@ -149,6 +159,8 @@ const static struct hex_seq droplets[] =	{
 	{pellet, sizeof(pellet)},
 	{fake_glossy_header, sizeof(fake_glossy_header)},
 	{glossy_data_pkt, sizeof(glossy_data_pkt)},
+	{glossy_sync_pkt, sizeof(glossy_sync_pkt)},
+	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
 static int droplet_index;
@@ -161,9 +173,10 @@ static struct variable const variable_list[] = {
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
-	{'h', (union number*)&droplet_index, 2, "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
+	{'h', (union number*)&droplet_index, sizeof(droplet_index), "droplet_index", 0, sizeof(droplets)/sizeof(struct hex_seq)-1},
 	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
 	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
+	{'m', (union number*)&rp_en, sizeof(rp_en), "reverse phase enabled", 0, 1},
 };
 
 const static struct field field_list[] = {
@@ -226,6 +239,18 @@ AUTOSTART_PROCESSES(&test_process);
 
 static void packet_input(void);
 
+/*-----------------------------------------------------------------------------*/
+static void
+reverse_phase(uint8_t *buf, size_t buflen)
+{
+	int i;
+	/* PRINTF("0x"); */
+	for(i = 0; i < buflen; i++) {
+		RP_BYTE(buf[i]);
+		/* PRINTF("%2X", buf[i]); */
+	}
+	/* PRINTF("\n"); */
+}
 /*---------------------------------------------------------------------------*/
 unsigned
 getreg(unsigned regname)
@@ -296,21 +321,22 @@ send_len_buf(struct rtimer *t, void *ptr)
 	if (ptr) {
 		/* Write empty frame to TX FIFO. */
 		// frame length is appended by a bogus byte that induces a minimal delay to the power-down of the TX circuit, thus avoiding corruption of transmitted frame length.
-		/* CC2420_WRITE_FIFO_BUF(&len_hdr, 2); */
-		CC2420_WRITE_FIFO_BUF(&(droplets[droplet_index].data), droplets[droplet_index].size +1);
+		CC2420_WRITE_FIFO_BUF(&len_hdr, 2);
+
+		/* CC2420_WRITE_FIFO_BUF(&(droplets[droplet_index].data), droplets[droplet_index].size +1); */
 
 		/* Transmit */
 		strobe(CC2420_STXON);
 
 		/* We wait until underflow has occured, which should take at least
-			 tx touraround time (128 us) + 4 preamble bytes + SFD byte (5*32=160 us) = 288 us */
+		   tx touraround time (128 us) + 4 preamble bytes + SFD byte (5*32=160 us) = 288 us */
 		BUSYWAIT_UNTIL((status() & BV(CC2420_TX_UNDERFLOW)), RTIMER_SECOND / 2000);
 
 		/* Flush TX FIFO */
 		strobe(CC2420_SFLUSHTX);
 
 		/* schedule next send */
-			rtimer_set(&rt, rt.time + rtimer_interval, 0, send_len_buf, (void *)1);
+		rtimer_set(&rt, rt.time + rtimer_interval, 0, send_len_buf, (void *)1);
 	}
 }
 
@@ -370,7 +396,7 @@ send_carrier(int mode)
 		reg &= ~TX_MODE_BV;
 		reg |= TX_MODE_3;
     setreg(CC2420_MDMCTRL1, reg);
-  } else if(mode == DRIZZLE) {
+  } else if(mode == DRIZZLE || mode == CAPSULE) {
 		reg &= ~TX_MODE_BV;
 		reg |= TX_MODE_2;
     setreg(CC2420_MDMCTRL1, reg);
@@ -511,18 +537,72 @@ update_txfifo(struct rtimer *t, void *ptr)
 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND*4096L/1000000L+1, 0, update_txfifo, (void *)0);
 }
 
+/* Capsule mode: drizzle transmission of encapsulated droplets */
+static void
+capsule_mode(int new_mode)
+{
+	uint8_t buf[128];
+	size_t buflen = 3 + droplets[droplet_index].size;
+
+	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+
+	/* Fill packet header with preamble, SFD and LEN */
+	buf[0] = 0x00; // preamble
+	buf[1] = 0xA7; // SFD
+	buf[2] = droplets[droplet_index].size + 2; // LEN = payload + crc
+	
+	/* Fill droplet */
+	memcpy(&buf[3], droplets[droplet_index].data, droplets[droplet_index].size);
+
+	/* Optional: reverse phase of droplet */
+	if (rp_en) {
+		reverse_phase(&buf[3], droplets[droplet_index].size);
+		print_hex_seq("RP Droplet header: ", &buf[3], droplets[droplet_index].size);
+	}
+
+	/* Calcuate CRC */
+	uint16_t checksum = crc16_data(&buf[3], droplets[droplet_index].size, 0);
+	printf("checksum = %4x\n", checksum);
+	buf[buflen] = checksum & 0xFF;
+	buf[buflen+1] = checksum >> 8;
+	print_hex_seq("capsule packet & CRC): ", buf, buflen+2);
+
+	/* Fill Tx FIFO with replicates of capsules */
+	pad(txfifo_data, sizeof(txfifo_data), buf, buflen+2, NULL);
+
+	// Debug print
+	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
+
+	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
+	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
+	send_carrier(mode);
+}
+
 static void
 drizzle_mode(int new_mode)
 {
 	/* // TEST: send Drizzle with wrong synch header, in order to create attack solely by including sending Droplet headers in the payload */
 	/* setreg(CC2420_SYNCWORD, 0xCD0F); */
-	printf("SYNCWORD=0x%02x\n", getreg(CC2420_SYNCWORD));
+	/* printf("SYNCWORD=0x%02x\n", getreg(CC2420_SYNCWORD)); */
 	
-	struct hex_seq seq = droplets[droplet_index];
-	pad(txfifo_data, sizeof(txfifo_data), seq.data, seq.size, NULL);
+	uint8_t buf[128];
+	size_t buflen = droplets[droplet_index].size;
 
 	// Debug print
-	print_hex_seq("Droplet header: ", seq.data, seq.size);
+	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+	memcpy(buf, droplets[droplet_index].data, buflen);
+
+	/* Optional: reverse phase of droplet */
+	if (rp_en) {
+		reverse_phase(buf, buflen);
+		print_hex_seq("RP Droplet header: ", buf, buflen);
+	}
+	/* Optional: reverse phase of droplet */
+
+	/* Fill Tx FIFO with replicates of droplet */
+	pad(txfifo_data, sizeof(txfifo_data), buf, buflen, NULL);
+
+	// Debug print
 	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
@@ -530,9 +610,9 @@ drizzle_mode(int new_mode)
 	send_carrier(mode);
 
 	// TEST: automatically update Drizzle content continuously during transmssion
-	if (!seq.data[0] && !seq.data[1] && !seq.data[2]) {
-		rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND/256, 0, update_txfifo, (void *)1);
-	}
+	/* if (!seq.data[0] && !seq.data[1] && !seq.data[2]) { */
+	/* 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND/256, 0, update_txfifo, (void *)1); */
+	/* } */
 }
 
 /* Reactive jamming */
@@ -577,55 +657,45 @@ jam_mode(int new_mode)
 static void
 tx_eth(void)
 {
-	int i;
 	int errno;
-	uint16_t buf[127/2+1];
-	uint8_t *buf_ptr = (uint8_t *)buf;
+	uint8_t buf[128];
 
 	if(seqno < max_tx_packets) {
 		etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
 
+		/* Send a seqno appended by random bytes*/
 		/* int i; */
 		/* for(i = 0;i < payload_len;++i) { */
-		/* 	buf_ptr[i] = (uint8_t)random_rand(); */
+		/* 	buf[i] = (uint8_t)random_rand(); */
 		/* } */
 		/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
-
-		/* Test: fill payload with SYNC header */
-/* #define REVERSE_PHASE(octet)	( ((((octet>>4)+8)%16)<<4) + ((octet&0x0f)+8)%16 ) */
-/* #define MOD_MODE_BIT 4 */
-/* #define MOD_MODE_BV (1<<MOD_MODE_BIT) */
-/* 		uint8_t sync_hdr[] = {0x00, 0x00, 0xA7, 0x7F}; // RP: 0x88, 0x2F, 0xF7 */
-/* 		// In case in RP mode, reverse SYNC header back to normal mode */
-/* 		if (getreg(CC2420_MDMCTRL1) & MOD_MODE_BV) { */
-/* 			for (i = 0;i < sizeof(sync_hdr);i++) { */
-/* 				sync_hdr[i] = REVERSE_PHASE(sync_hdr[i]); */
-/* 			} */
-/* 		}; */
-/* 		memcpy(buf_ptr+payload_len-sizeof(sync_hdr), &sync_hdr[0], sizeof(sync_hdr)); */
-/* 		/\* pad(buf_ptr, payload_len, sync_hdr, sizeof(sync_hdr), NULL); *\/ // pad payload with SYNC headers */
-/* 		snprintf((char *)buf, sizeof(buf), "%u", seqno); */
 		/* errno = cc2420_driver.send(buf, payload_len); */
 
-		/* Test: set payload len to by glossy frame len, and fill payload with glossy app header, followed by user string */
+		/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
+		// Debug print
+		print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
 
-		/* payload_len = sizeof(glossy_data_pkt) - 5; */
-		/* memcpy(buf_ptr, &glossy_data_pkt[3], payload_len);  */
-		/* memcpy(buf_ptr, &glossy_data_pkt[3], payload_len);  */
-		char s[] = "Hi!";
-		payload_len = strlen(s);
-		memcpy(buf_ptr, s, payload_len); 
-		uint16_t checksum = crc16_data(buf_ptr, payload_len, 0);
-		printf("checksum = %4x\n", checksum);
-		buf_ptr[payload_len] = checksum & 0xFF;
-		buf_ptr[payload_len+1] = checksum >> 8;
-		print_hex_seq("tx packet: ", buf_ptr, payload_len+2);
-		// turn off AUTOCRC 
-		uint16_t reg = getreg(CC2420_MDMCTRL0);
-		reg &= ~AUTOCRC;
-		setreg(CC2420_MDMCTRL0, reg);
-		errno = cc2420_driver.send(buf, payload_len+2);
+		size_t buflen = droplets[droplet_index].size;
+		memcpy(buf, droplets[droplet_index].data, buflen);
 
+		// Optional: reverse phase of droplet
+		if (rp_en) {
+			reverse_phase(buf, buflen);
+			print_hex_seq("RP Droplet header: ", buf, buflen);
+		}
+		/* // Optional: append payload with manual CRC instead of auto CRC */
+		/* uint16_t checksum = crc16_data(buf, buflen, 0); */
+		/* printf("checksum = %4x\n", checksum); */
+		/* buf[buflen] = checksum & 0xFF; */
+		/* buf[buflen+1] = checksum >> 8; */
+		/* print_hex_seq("tx packet (with CRC): ", buf, buflen+2); */
+		/* uint16_t reg = getreg(CC2420_MDMCTRL0); */
+		/* reg &= ~AUTOCRC; */
+		/* setreg(CC2420_MDMCTRL0, reg); */
+		// send packet, assuming cc2420_send() computes LEN with LEN = payload_len + 2
+		errno = cc2420_driver.send(buf, buflen);
+
+		/* Increment seqno */
 		if (errno == RADIO_TX_OK) printf(". ");
 		else printf("cc2420_send error: %d\n", errno);
 		++seqno;
@@ -712,6 +782,7 @@ const static struct mode mode_list[] = {
 	{TX, "TX broadcast", tx_mode, stop_rtimer, NULL, tx_eth},
 	{TX2, "TX unicast", tx2_mode, stop_rtimer, NULL, tx2_eth},
 	{DRIZZLE, "Drizzle", drizzle_mode, stop_rtimer, NULL, attack_eth},
+	{CAPSULE, "Capsule", capsule_mode, stop_rtimer, NULL, attack_eth},
 	{DROPLET, "Droplet", droplet_mode, stop_rtimer, NULL, attack_eth},
 	{JAM, "Reactive jamming", jam_mode, NULL, NULL, NULL},
 	{-1, NULL, NULL, NULL, NULL, NULL}
