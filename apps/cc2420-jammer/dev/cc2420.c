@@ -508,7 +508,7 @@ cc2420_prepare(const void *payload, unsigned short payload_len)
 #endif /* CC2420_CONF_CHECKSUM */
   GET_LOCK();
 
-  printf("cc2420: sending %d bytes\n", payload_len);
+  PRINTF("cc2420: sending %d bytes\n", payload_len);
 
   RIMESTATS_ADD(lltx);
 
@@ -523,11 +523,9 @@ cc2420_prepare(const void *payload, unsigned short payload_len)
 #endif /* CC2420_CONF_CHECKSUM */
 
 #if ENABLE_FAST_TX==0
-  /* total_len = payload_len + AUX_LEN; */
-  // test: don't append crc len
-  total_len = payload_len;
+  total_len = payload_len + AUX_LEN;
   CC2420_WRITE_FIFO_BUF(&total_len, 1);
-  CC2420_WRITE_FIFO_BUF(payload, payload_len);
+  CC2420_WRITE_FIFO_BUF(payload, total_len);
 #elif ENABLE_FAST_TX==2
 #define BLASTSPI_WRITE_FIFO(p,c)\
 	do {\
