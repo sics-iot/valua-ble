@@ -151,11 +151,8 @@ const static uint8_t glossy_sync_pkt[] = {0x00, 0xA7, 11, 0xA4, 0x03, 0x00, 0x3e
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 
 const static struct hex_seq droplets[] =	{
-	/* {sfd_1z_packed, sizeof(sfd_1z_packed)}, */
-	/* {sfd_1z, sizeof(sfd_1z)}, */
 	{sfd_2z, sizeof(sfd_2z)},
 	{sfd_3z, sizeof(sfd_3z)},
-	/* {all_zeros, sizeof(all_zeros)}, */
 	{pellet, sizeof(pellet)},
 	{fake_glossy_header, sizeof(fake_glossy_header)},
 	{glossy_data_pkt, sizeof(glossy_data_pkt)},
@@ -1009,7 +1006,7 @@ mac_update(void)
 	unsigned shortaddr;
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	// increment higher byte and clear lower byte, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
-	shortaddr = (shortaddr+(1<<8))%(8<<8) & 0xFF00;
+	shortaddr = ((shortaddr+0x0100) % 0x2000) & 0xFF00;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	printf("16-bit MAC address: 0x%04X\n", shortaddr);
 }
