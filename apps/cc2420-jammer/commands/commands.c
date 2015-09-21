@@ -156,34 +156,6 @@ var_update(char op, char var)
 		}
 	}
 }
-/*---------------------------------------------------------------------------*/
-/* Convert a hex number into 16 bit characters, MSB first */
-/* static char* */
-/* u16_to_bits(uint16_t n, char bits[]) */
-/* { */
-/* 	int i; */
-
-/* 	for(i=0;i<16;i++) { */
-/* 		bits[i] = (char)((n>>(15-i) & 1) + '0'); */
-/* 	} */
-
-/* 	bits[i] = '\0'; */
-
-/* 	return bits; */
-/* } */
-
-/* static void */
-/* show_all_registers(void) */
-/* { */
-/* 	uint16_t reg; */
-/* 	enum cc2420_register addr; */
-/* 	char bits[17]; //16 bits + '\0' */
-
-/* 	for (addr = CC2420_MAIN;addr <= CC2420_RESERVED;addr++) { */
-/* 		reg = getreg(addr); */
-/* 		PRINTF("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
-/* 	} */
-/* } */
 /*-----------------------------------------------------------------------------*/
 static void
 exec_command(char c)
@@ -197,40 +169,6 @@ exec_command(char c)
 		}
 	}
 }
-/*-----------------------------------------------------------------------------*/
-/* static unsigned */
-/* hexstr_to_unsigned(const char *s) */
-/* { */
-/* 	unsigned n,m; */
-
-/* 	for(n=0;(*s>='0' && *s<='9')||(*s>='a' && *s<='f')||(*s>='A' && *s<='F');s++) { */
-/* 		if(*s>='0' && *s<='9') {m=*s-'0';} */
-/* 		else if(*s>='a' && *s<='f') {m=*s-'a'+10;} */
-/* 		else {m=*s-'A'+10;} */
-/* 		n=n*16+m; */
-/* 	} */
-
-/* 	return n; */
-/* } */
-/*-----------------------------------------------------------------------------*/
-/* static void */
-/* print_reg(const char* hex_str) */
-/* { */
-/* 	uint16_t reg; */
-/* 	enum cc2420_register addr; */
-/* 	char bits[17]; //16 bits + '\0' */
-	
-/* 	addr = hexstr_to_unsigned(hex_str); */
-/*   if(addr >= CC2420_MAIN && addr <= CC2420_RESERVED) { */
-/* 		reg = getreg(addr); */
-/* 		PRINTF("0x%02X: 0x%04X %s\n", addr, reg,	u16_to_bits(reg, bits)); */
-/* 	} else if(addr < CC2420_foo) { */
-/* 		PRINTF("Strobe 0x%02X\n", addr); */
-/* 		CC2420_STROBE(addr); */
-/* 	} else { */
-/* 		PRINTF("Unknown register: 0x%s\n", hex_str); */
-/* 	} */
-/* } */
 /*-----------------------------------------------------------------------------*/
 static void
 help(void *foo)
