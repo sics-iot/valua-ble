@@ -1330,8 +1330,16 @@ PROCESS_THREAD(test_process, ev, data)
 		    /* Command handlers */
 		    do_command((char *)data);
 	    } else if (escape) {
-		    /* transmit message over air */
-		    (void)cc2420_driver.send(data, strlen((char *)data));
+		    /* /\* transmit message over air *\/ */
+		    /* (void)cc2420_driver.send(data, strlen((char *)data)); */
+		    /* fill frame buf with glossy broadcast data packet header followed by string as payload */
+/* const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!") */
+
+		    size_t slen = strlen((char *)data);
+		    memcpy(tx_buf, glossy_data_pkt_payload, 8);
+		    tx_buf[5] = 1;
+		    memcpy(&tx_buf[8], data, slen);
+		    tx_buf_len = 8 + slen;
 		    escape = 0;
 	    } else if (alt) {
 		    /* read string as hex sequence into chunk buf */
