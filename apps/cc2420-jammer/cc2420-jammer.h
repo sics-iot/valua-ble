@@ -15,6 +15,11 @@
 #define LAST_MODE OFF
 #define NUM_MODES (LAST_MODE+1)
 
+#define TX_SOURCE_SEQNO 0
+#define TX_SOURCE_DROPLETS 1
+#define TX_SOURCE_FRAME_BUF 2
+#define MAX_TX_SOURCE 3
+
 int cc2420_set_frequency(uint16_t f);
 uint16_t cc2420_get_frequency(void);
 void strobe(enum cc2420_register regname);

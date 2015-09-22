@@ -43,6 +43,7 @@
 #include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "dev/spi.h"
+
 #include "cc2420.h"
 #include "dev/cc2420/cc2420_const.h"
 #include "lib/random.h"
@@ -121,17 +122,30 @@ static uint8_t len_hdr = 127;
 static uint8_t rp_en = 0;
 static uint8_t escape = 0;
 static uint8_t alt = 0;
+static uint8_t tx_source = TX_SOURCE_SEQNO;
+static uint8_t manual_crc = 0;
 
 static struct etimer et;
 static struct rtimer rt;
 static uint16_t seqno;
-
 /* A byte sequence of certain length */
 struct hex_seq
 {
 	const uint8_t *data;
 	const size_t size;
 };
+
+static uint8_t tx_buf[127];
+static int tx_buf_len;
+
+/* A byte buffer with a size */
+struct hex_buf {
+	uint8_t *buf;
+	size_t bufsize;
+};
+
+static struct hex_buf chunks[2];
+static int chunk_index;
 
 long int sum_rssi;
 long unsigned sum_lqi;
@@ -178,6 +192,9 @@ static struct variable const variable_list[] = {
 	{'m', (union number*)&rp_en, sizeof(rp_en), "reverse phase enabled", 0, 1},
 	{'e', (union number*)&escape, sizeof(escape), "serial escape", 0, 1},
 	{'a', (union number*)&alt, sizeof(alt), "serial alternative", 0, 1},
+	{'c', (union number*)&chunk_index, sizeof(chunk_index), "chunk_index", 0, sizeof(chunks) / sizeof(chunks[0]) -1},
+	{'C', (union number*)&manual_crc, sizeof(manual_crc), "manual_crc", 0, 1},
+	{'x', (union number*)&tx_source, sizeof(tx_source), "tx_source", 0, MAX_TX_SOURCE - 1},
 };
 
 const static struct field field_list[] = {
@@ -241,10 +258,6 @@ AUTOSTART_PROCESSES(&test_process);
 static void packet_input(void);
 
 /*-----------------------------------------------------------------------------*/
-// param str: hex string
-static uint8_t tx_buf[127];
-static int tx_buf_len;
-
 static int
 char_hex(char c)
 {
@@ -258,23 +271,32 @@ char_hex(char c)
 	return -1;
 }
 
-static void
-fill_tx_buf(char *str, int n)
+/* convert a string of HEX chars into a byte array */
+static size_t
+fill_hex_buf(char *str, int n, uint8_t *buf, size_t bufsize)
 {
 	int i;
-	uint8_t *p = tx_buf;
+	uint8_t *p = buf;
+	int h, l;
 
-	if (n % 2) return; // n must be an even number
-
-	/* memset(tx_buf, 0, sizeof(tx_buf)); */
-	// read two hex numbers as one byte at a time
-	for (i = 0; i < n; i+=2, p++) {
-		*p = (char_hex(str[i]) << 4) + char_hex(str[i+1]);
+	// throw away trailing odd char
+	n = (n >> 1) << 1;
+	// truncate long string to avoid buffer overflow
+	if (n > bufsize * 2) {
+		n = bufsize * 2;
 	}
 
-	tx_buf_len = n / 2;
-}
+	// read two hex numbers as one byte at a time, msb first
+	for (i = 0; i < n; i+=2, p++) {
+		if ((h = char_hex(str[i])) >= 0 && (l = char_hex(str[i+1])) >= 0) {
+			*p = (h<<4) + l;
+		} else {
+			return -2;
+		}
+	}
 
+	return p - buf;
+}
 /*-----------------------------------------------------------------------------*/
 static void
 reverse_phase(uint8_t *buf, size_t buflen)
@@ -328,6 +350,18 @@ print_hex_seq(const char *prefix, const uint8_t *data, size_t size)
 	char *dbuf_ptr = dbuf;
 	for(i = 0;i < size;++i){
 		dbuf_ptr += snprintf(dbuf_ptr, sizeof(dbuf), "%02x", data[i]);
+	}
+	printf("%s%s\n", prefix, dbuf);
+}
+
+static void
+print_hex_buf(const char *prefix, uint8_t *buf, size_t bufsize)
+{
+	int i;
+	char dbuf[bufsize*2+1];
+	char *dbuf_ptr = dbuf;
+	for(i = 0;i < bufsize;++i){
+		dbuf_ptr += snprintf(dbuf_ptr, sizeof(dbuf), "%02x", buf[i]);
 	}
 	printf("%s%s\n", prefix, dbuf);
 }
@@ -622,20 +656,47 @@ drizzle_mode(int new_mode)
 	/* printf("SYNCWORD=0x%02x\n", getreg(CC2420_SYNCWORD)); */
 	
 	uint8_t buf[128];
-	size_t buflen = droplets[droplet_index].size;
+	size_t buflen;
 
-	// Debug print
-	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
-	memcpy(buf, droplets[droplet_index].data, buflen);
+	if (tx_source == TX_SOURCE_SEQNO) {
+		/* Send a seqno appended by random bytes*/
+		int i;
+		buflen = payload_len;
+		for(i = 0;i < payload_len;++i) {
+			buf[i] = (uint8_t)random_rand();
+		}
+		snprintf((char *)buf, sizeof(buf), "%u", seqno);
+	} else if (tx_source == TX_SOURCE_DROPLETS) {
+		/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
+		// Debug print
+		print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
 
+		buflen = droplets[droplet_index].size;
+		memcpy(buf, droplets[droplet_index].data, buflen);
+	} else if (tx_source == TX_SOURCE_FRAME_BUF) {
+		/* send frame buf */
+		memcpy(buf, tx_buf, tx_buf_len);
+		buflen = tx_buf_len;
+	} else {
+		/* unkown source */
+		return;
+	}
 	/* Optional: reverse phase of droplet */
 	if (rp_en) {
 		reverse_phase(buf, buflen);
-		print_hex_seq("RP Droplet header: ", buf, buflen);
+		print_hex_seq("RP buf: ", buf, buflen);
 	}
-	/* Optional: reverse phase of droplet */
+	/* Optional: append payload with manual CRC, instead of no CRC */
+	if (manual_crc) {
+		uint16_t checksum = crc16_data(buf, buflen, 0);
+		/* printf("checksum = %4x\n", checksum); */
+		buf[buflen] = checksum & 0xFF;
+		buf[buflen+1] = checksum >> 8;
+		print_hex_seq("tx packet (with CRC): ", buf, buflen+2);
+		buflen += 2;
+	}
 
-	/* Fill Tx FIFO with replicates of droplet */
+	/* Fill Tx FIFO with replicates of content in buf */
 	pad(txfifo_data, sizeof(txfifo_data), buf, buflen, NULL);
 
 	// Debug print
@@ -695,40 +756,52 @@ tx_eth(void)
 {
 	int errno;
 	uint8_t buf[128];
+	size_t buflen;
 
 	if(seqno < max_tx_packets) {
 		etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
 
+		if (tx_source == TX_SOURCE_SEQNO) {
 		/* Send a seqno appended by random bytes*/
-		/* int i; */
-		/* for(i = 0;i < payload_len;++i) { */
-		/* 	buf[i] = (uint8_t)random_rand(); */
-		/* } */
-		/* snprintf((char *)buf, sizeof(buf), "%u", seqno); */
-		/* errno = cc2420_driver.send(buf, payload_len); */
+			int i;
+			buflen = payload_len;
+			for(i = 0;i < payload_len;++i) {
+				buf[i] = (uint8_t)random_rand();
+			}
+			snprintf((char *)buf, sizeof(buf), "%u", seqno);
+		} else if (tx_source == TX_SOURCE_DROPLETS) {
+			/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
+			// Debug print
+			print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
 
-		/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
-		// Debug print
-		print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
-
-		size_t buflen = droplets[droplet_index].size;
-		memcpy(buf, droplets[droplet_index].data, buflen);
-
-		// Optional: reverse phase of droplet
+			buflen = droplets[droplet_index].size;
+			memcpy(buf, droplets[droplet_index].data, buflen);
+		} else if (tx_source == TX_SOURCE_FRAME_BUF) {
+			/* send frame buf */
+			memcpy(buf, tx_buf, tx_buf_len);
+			buflen = tx_buf_len;
+		} else {
+			/* unkown source */
+			return;
+		}
+		/* Optional: reverse phase of droplet */
 		if (rp_en) {
 			reverse_phase(buf, buflen);
-			print_hex_seq("RP Droplet header: ", buf, buflen);
+			print_hex_seq("RP buf: ", buf, buflen);
 		}
-		/* // Optional: append payload with manual CRC instead of auto CRC */
-		/* uint16_t checksum = crc16_data(buf, buflen, 0); */
+		/* Optional: append payload with manual CRC instead of auto CRC */
+		if (manual_crc) {
+		uint16_t checksum = crc16_data(buf, buflen, 0);
 		/* printf("checksum = %4x\n", checksum); */
-		/* buf[buflen] = checksum & 0xFF; */
-		/* buf[buflen+1] = checksum >> 8; */
-		/* print_hex_seq("tx packet (with CRC): ", buf, buflen+2); */
-		/* uint16_t reg = getreg(CC2420_MDMCTRL0); */
-		/* reg &= ~AUTOCRC; */
-		/* setreg(CC2420_MDMCTRL0, reg); */
-		// send packet, assuming cc2420_send() computes LEN with LEN = payload_len + 2
+		buf[buflen] = checksum & 0xFF;
+		buf[buflen+1] = checksum >> 8;
+		print_hex_seq("tx packet (with CRC): ", buf, buflen+2);
+		uint16_t reg = getreg(CC2420_MDMCTRL0);
+		reg &= ~AUTOCRC;
+		setreg(CC2420_MDMCTRL0, reg);
+		}
+
+		// assuming cc2420_send() computes LEN with LEN = payload_len + 2
 		errno = cc2420_driver.send(buf, buflen);
 
 		/* Increment seqno */
@@ -1168,6 +1241,22 @@ battery_level(void)
 	setreg(CC2420_BATTMON, SETFV(reg, lv_orig, 4, 0)); // restore original monitor level
 }
 
+static void
+assemble_packet_from_chunks(void)
+{
+	int i;
+	uint8_t *p = tx_buf;
+	for (i = 0; i < sizeof(chunks) / sizeof(chunks[0]); i++) {
+		if (chunks[i].bufsize) {
+			memcpy(p, chunks[i].buf, chunks[i].bufsize);
+			p += chunks[i].bufsize;
+		}
+	}
+	tx_buf_len = p - tx_buf;
+	// debug print
+	print_hex_buf("0x", tx_buf, tx_buf_len);
+}
+
 static const struct command cmd_list[] =    {
  {'e', "Reboot", reboot},
  {'w', "TX power level", view_tx_power_level},
@@ -1189,6 +1278,7 @@ static const struct command cmd_list[] =    {
  {'R', "Read TXFIFO", read_tx_fifo},
  {'W', "Write TXFIFO", write_tx_fifo},
  {'F', "Read RXFIFO", read_rx_fifo},
+ {'a', "Assemble packet from chunks", assemble_packet_from_chunks},
 };
 
 void
@@ -1270,9 +1360,17 @@ PROCESS_THREAD(test_process, ev, data)
 		    (void)cc2420_driver.send(data, strlen((char *)data));
 		    escape = 0;
 	    } else if (alt) {
-		    /* read string as hex sequence into tx buf */
-		    fill_tx_buf(data, strlen((char *)data));
-		    print_hex_seq("", tx_buf, tx_buf_len);
+		    /* read string as hex sequence into chunk buf */
+		    if (chunks[chunk_index].buf) {
+			    free(chunks[chunk_index].buf);
+		    }
+		    size_t chunk_size = strlen((char *)data) / 2;
+		    void *p = malloc(chunk_size);
+		    chunks[chunk_index].bufsize = fill_hex_buf(data, strlen((char *)data), p , chunk_size);
+		    if (chunks[chunk_index].bufsize > 0) {
+			    chunks[chunk_index].buf = p;
+			    print_hex_seq("", chunks[chunk_index].buf, chunks[chunk_index].bufsize);
+		    }
 		    alt = 0;
 	    }
     } else if(ev == sensors_event && data == &button_sensor) {
