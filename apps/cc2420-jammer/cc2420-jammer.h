@@ -8,10 +8,9 @@
 #define UNMOD 4
 #define CH 5
 #define DRIZZLE 6
-#define CAPSULE 7
-#define TX2 8
-#define JAM 9
-#define OFF 10
+#define TX2 7
+#define JAM 8
+#define OFF 9
 #define LAST_MODE OFF
 #define NUM_MODES (LAST_MODE+1)
 

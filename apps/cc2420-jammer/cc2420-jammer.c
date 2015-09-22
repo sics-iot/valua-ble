@@ -124,6 +124,7 @@ static uint8_t escape = 0;
 static uint8_t alt = 0;
 static uint8_t tx_source = TX_SOURCE_SEQNO;
 static uint8_t manual_crc = 0;
+static uint8_t prepend_phy_hdr = 0;
 
 static struct etimer et;
 static struct rtimer rt;
@@ -165,14 +166,15 @@ const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA4}; // glossy h
 const static uint8_t glossy_data_pkt[] = {0x00, 0xA7, 13, 0xA3, 0x04, 0x00, 0x05, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!', 0xB1, 0xA7}; // preamble + SFD + LEN + 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!") + crc16
 const static uint8_t glossy_sync_pkt[] = {0x00, 0xA7, 11, 0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00, 0x63, 0x2B}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
+const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
+const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!")
 
 const static struct hex_seq droplets[] =	{
 	{sfd_2z, sizeof(sfd_2z)},
-	{sfd_3z, sizeof(sfd_3z)},
 	{pellet, sizeof(pellet)},
 	{fake_glossy_header, sizeof(fake_glossy_header)},
-	{glossy_data_pkt, sizeof(glossy_data_pkt)},
-	{glossy_sync_pkt, sizeof(glossy_sync_pkt)},
+	{glossy_sync_pkt_payload, sizeof(glossy_sync_pkt_payload)},
+	{glossy_data_pkt_payload, sizeof(glossy_data_pkt_payload)},
 	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
@@ -195,6 +197,7 @@ static struct variable const variable_list[] = {
 	{'c', (union number*)&chunk_index, sizeof(chunk_index), "chunk_index", 0, sizeof(chunks) / sizeof(chunks[0]) -1},
 	{'C', (union number*)&manual_crc, sizeof(manual_crc), "manual_crc", 0, 1},
 	{'x', (union number*)&tx_source, sizeof(tx_source), "tx_source", 0, MAX_TX_SOURCE - 1},
+	{'P', (union number*)&prepend_phy_hdr, sizeof(prepend_phy_hdr), "prepend_phy_hdr", 0, 1},
 };
 
 const static struct field field_list[] = {
@@ -466,7 +469,7 @@ send_carrier(int mode)
 		reg &= ~TX_MODE_BV;
 		reg |= TX_MODE_3;
     setreg(CC2420_MDMCTRL1, reg);
-  } else if(mode == DRIZZLE || mode == CAPSULE) {
+  } else if(mode == DRIZZLE) {
 		reg &= ~TX_MODE_BV;
 		reg |= TX_MODE_2;
     setreg(CC2420_MDMCTRL1, reg);
@@ -607,47 +610,6 @@ update_txfifo(struct rtimer *t, void *ptr)
 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND*4096L/1000000L+1, 0, update_txfifo, (void *)0);
 }
 
-/* Capsule mode: drizzle transmission of encapsulated droplets */
-static void
-capsule_mode(int new_mode)
-{
-	uint8_t buf[128];
-	size_t buflen = 3 + droplets[droplet_index].size;
-
-	print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
-
-	/* Fill packet header with preamble, SFD and LEN */
-	buf[0] = 0x00; // preamble
-	buf[1] = 0xA7; // SFD
-	buf[2] = droplets[droplet_index].size + 2; // LEN = payload + crc
-	
-	/* Fill droplet */
-	memcpy(&buf[3], droplets[droplet_index].data, droplets[droplet_index].size);
-
-	/* Optional: reverse phase of droplet */
-	if (rp_en) {
-		reverse_phase(&buf[3], droplets[droplet_index].size);
-		print_hex_seq("RP Droplet header: ", &buf[3], droplets[droplet_index].size);
-	}
-
-	/* Calcuate CRC */
-	uint16_t checksum = crc16_data(&buf[3], droplets[droplet_index].size, 0);
-	printf("checksum = %4x\n", checksum);
-	buf[buflen] = checksum & 0xFF;
-	buf[buflen+1] = checksum >> 8;
-	print_hex_seq("capsule packet & CRC): ", buf, buflen+2);
-
-	/* Fill Tx FIFO with replicates of capsules */
-	pad(txfifo_data, sizeof(txfifo_data), buf, buflen+2, NULL);
-
-	// Debug print
-	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
-
-	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
-	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
-	send_carrier(mode);
-}
-
 static void
 drizzle_mode(int new_mode)
 {
@@ -657,6 +619,12 @@ drizzle_mode(int new_mode)
 	
 	uint8_t buf[128];
 	size_t buflen;
+	uint8_t *pbuf = buf;
+
+	/* Optional: reserve 3 bytes for 802.15.4 Preamble, SFD and LEN */
+	if (prepend_phy_hdr) {
+		pbuf += 3;
+	}
 
 	if (tx_source == TX_SOURCE_SEQNO) {
 		/* Send a seqno appended by random bytes*/
@@ -665,35 +633,42 @@ drizzle_mode(int new_mode)
 		for(i = 0;i < payload_len;++i) {
 			buf[i] = (uint8_t)random_rand();
 		}
-		snprintf((char *)buf, sizeof(buf), "%u", seqno);
+		snprintf((char *)pbuf, sizeof(buf), "%u", seqno);
 	} else if (tx_source == TX_SOURCE_DROPLETS) {
 		/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
 		// Debug print
-		print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+		print_hex_seq("Drizzle payload: ", droplets[droplet_index].data, droplets[droplet_index].size);
 
 		buflen = droplets[droplet_index].size;
-		memcpy(buf, droplets[droplet_index].data, buflen);
+		memcpy(pbuf, droplets[droplet_index].data, buflen);
 	} else if (tx_source == TX_SOURCE_FRAME_BUF) {
 		/* send frame buf */
-		memcpy(buf, tx_buf, tx_buf_len);
+		memcpy(pbuf, tx_buf, tx_buf_len);
 		buflen = tx_buf_len;
 	} else {
 		/* unkown source */
 		return;
 	}
-	/* Optional: reverse phase of droplet */
+	/* Optional: reverse phase of payload */
 	if (rp_en) {
-		reverse_phase(buf, buflen);
+		reverse_phase(pbuf, buflen);
 		print_hex_seq("RP buf: ", buf, buflen);
 	}
 	/* Optional: append payload with manual CRC, instead of no CRC */
 	if (manual_crc) {
-		uint16_t checksum = crc16_data(buf, buflen, 0);
+		uint16_t checksum = crc16_data(pbuf, buflen, 0);
 		/* printf("checksum = %4x\n", checksum); */
-		buf[buflen] = checksum & 0xFF;
-		buf[buflen+1] = checksum >> 8;
-		print_hex_seq("tx packet (with CRC): ", buf, buflen+2);
+		pbuf[buflen] = checksum & 0xFF;
+		pbuf[buflen+1] = checksum >> 8;
+		print_hex_seq("tx packet (with CRC): ", pbuf, buflen+2);
 		buflen += 2;
+	}
+
+	if (prepend_phy_hdr) {
+		buf[0] = 0x00; // preamble
+		buf[1] = 0xA7; // SFD
+		buf[2] = buflen; // LEN = payload + crc
+		buflen += 3;
 	}
 
 	/* Fill Tx FIFO with replicates of content in buf */
@@ -891,7 +866,6 @@ const static struct mode mode_list[] = {
 	{TX, "TX broadcast", tx_mode, stop_rtimer, NULL, tx_eth},
 	{TX2, "TX unicast", tx2_mode, stop_rtimer, NULL, tx2_eth},
 	{DRIZZLE, "Drizzle", drizzle_mode, stop_rtimer, NULL, attack_eth},
-	{CAPSULE, "Capsule", capsule_mode, stop_rtimer, NULL, attack_eth},
 	{DROPLET, "Droplet", droplet_mode, stop_rtimer, NULL, attack_eth},
 	{JAM, "Reactive jamming", jam_mode, NULL, NULL, NULL},
 	{-1, NULL, NULL, NULL, NULL, NULL}
