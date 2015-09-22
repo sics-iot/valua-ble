@@ -119,6 +119,8 @@ static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
 static uint8_t len_hdr = 127;
 static uint8_t rp_en = 0;
+static uint8_t escape = 0;
+static uint8_t alt = 0;
 
 static struct etimer et;
 static struct rtimer rt;
@@ -174,6 +176,8 @@ static struct variable const variable_list[] = {
 	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
 	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
 	{'m', (union number*)&rp_en, sizeof(rp_en), "reverse phase enabled", 0, 1},
+	{'e', (union number*)&escape, sizeof(escape), "serial escape", 0, 1},
+	{'a', (union number*)&alt, sizeof(alt), "serial alternative", 0, 1},
 };
 
 const static struct field field_list[] = {
@@ -235,6 +239,41 @@ PROCESS(test_process, "CC2420 jammer");
 AUTOSTART_PROCESSES(&test_process);
 
 static void packet_input(void);
+
+/*-----------------------------------------------------------------------------*/
+// param str: hex string
+static uint8_t tx_buf[127];
+static int tx_buf_len;
+
+static int
+char_hex(char c)
+{
+	if (c >= '0' && c <= '9') {
+		return c - '0';
+	} else if (c >= 'A' && c <= 'F') {
+		return c - 'A' + 10;
+	} else if (c >= 'a' && c <= 'f') {
+		return c - 'a' + 10;
+	}
+	return -1;
+}
+
+static void
+fill_tx_buf(char *str, int n)
+{
+	int i;
+	uint8_t *p = tx_buf;
+
+	if (n % 2) return; // n must be an even number
+
+	/* memset(tx_buf, 0, sizeof(tx_buf)); */
+	// read two hex numbers as one byte at a time
+	for (i = 0; i < n; i+=2, p++) {
+		*p = (char_hex(str[i]) << 4) + char_hex(str[i+1]);
+	}
+
+	tx_buf_len = n / 2;
+}
 
 /*-----------------------------------------------------------------------------*/
 static void
@@ -1223,8 +1262,19 @@ PROCESS_THREAD(test_process, ev, data)
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
 			et_handler();
     } else if(ev == serial_line_event_message) {
-			/* Command handlers */
-			do_command((char *)data);
+	    if (!escape && !alt) {
+		    /* Command handlers */
+		    do_command((char *)data);
+	    } else if (escape) {
+		    /* transmit message over air */
+		    (void)cc2420_driver.send(data, strlen((char *)data));
+		    escape = 0;
+	    } else if (alt) {
+		    /* read string as hex sequence into tx buf */
+		    fill_tx_buf(data, strlen((char *)data));
+		    print_hex_seq("", tx_buf, tx_buf_len);
+		    alt = 0;
+	    }
     } else if(ev == sensors_event && data == &button_sensor) {
       start_mode((mode + 1) % NUM_MODES);
     }
@@ -1272,5 +1322,11 @@ packet_input(void)
 		max_rssi = (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) > max_rssi ? (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) : max_rssi;
 		min_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) < min_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : min_lqi;
 		max_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) > max_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : max_lqi;
+	}
+
+	/* execute serial command received from air */
+	if (escape==1 && len < 3) {
+		*((uint8_t *)(packetbuf_dataptr() + len)) = '\0';
+		do_command(packetbuf_dataptr());
 	}
 }
