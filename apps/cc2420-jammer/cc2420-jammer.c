@@ -136,8 +136,8 @@ struct hex_seq
 	const size_t size;
 };
 
-static uint8_t tx_buf[127];
-static int tx_buf_len;
+static uint8_t frame_buf[128];
+static int frame_buf_len;
 
 /* A byte buffer with a size */
 struct hex_buf {
@@ -145,7 +145,7 @@ struct hex_buf {
 	size_t bufsize;
 };
 
-static struct hex_buf chunks[2];
+static struct hex_buf chunks[4];
 static int chunk_index;
 
 long int sum_rssi;
@@ -163,8 +163,6 @@ const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sy
 const static uint8_t all_zeros[128];
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
 const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA4}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
-const static uint8_t glossy_data_pkt[] = {0x00, 0xA7, 13, 0xA3, 0x04, 0x00, 0x05, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!', 0xB1, 0xA7}; // preamble + SFD + LEN + 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!") + crc16
-const static uint8_t glossy_sync_pkt[] = {0x00, 0xA7, 11, 0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00, 0x63, 0x2B}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!")
@@ -643,8 +641,8 @@ drizzle_mode(int new_mode)
 		memcpy(pbuf, droplets[droplet_index].data, buflen);
 	} else if (tx_source == TX_SOURCE_FRAME_BUF) {
 		/* send frame buf */
-		memcpy(pbuf, tx_buf, tx_buf_len);
-		buflen = tx_buf_len;
+		memcpy(pbuf, frame_buf, frame_buf_len);
+		buflen = frame_buf_len;
 	} else {
 		/* unkown source */
 		return;
@@ -753,8 +751,8 @@ tx_eth(void)
 			memcpy(buf, droplets[droplet_index].data, buflen);
 		} else if (tx_source == TX_SOURCE_FRAME_BUF) {
 			/* send frame buf */
-			memcpy(buf, tx_buf, tx_buf_len);
-			buflen = tx_buf_len;
+			memcpy(buf, frame_buf, frame_buf_len);
+			buflen = frame_buf_len;
 		} else {
 			/* unkown source */
 			return;
@@ -1219,16 +1217,53 @@ static void
 assemble_packet_from_chunks(void)
 {
 	int i;
-	uint8_t *p = tx_buf;
+	uint8_t *p = frame_buf;
 	for (i = 0; i < sizeof(chunks) / sizeof(chunks[0]); i++) {
 		if (chunks[i].bufsize) {
 			memcpy(p, chunks[i].buf, chunks[i].bufsize);
 			p += chunks[i].bufsize;
 		}
 	}
-	tx_buf_len = p - tx_buf;
+	frame_buf_len = p - frame_buf;
 	// debug print
-	print_hex_buf("0x", tx_buf, tx_buf_len);
+	print_hex_buf("0x", frame_buf, frame_buf_len);
+}
+
+static void
+droplet_to_chunk(void)
+{
+	if (chunks[chunk_index].buf) {
+		free(chunks[chunk_index].buf);
+	}
+	size_t chunk_size = droplets[droplet_index].size;
+	chunks[chunk_index].buf = malloc(chunk_size);
+	memcpy(chunks[chunk_index].buf, droplets[droplet_index].data, chunk_size);
+	chunks[chunk_index].bufsize = chunk_size;
+	printf("chunk %d: ", chunk_index);
+	print_hex_buf("0x", chunks[chunk_index].buf, chunk_size);
+}
+
+static void
+print_chunks(void)
+{
+	int i;
+	for (i=0; i<sizeof(chunks)/sizeof(chunks[0]); i++) {
+		printf("chunk %d: ", i);
+		print_hex_buf("0x", chunks[i].buf, chunks[i].bufsize);
+	}
+}
+
+static void
+print_droplet(void)
+{
+	printf("droplet %u", droplet_index);
+	print_hex_seq("0x", droplets[droplet_index].data, droplets[droplet_index].size);
+}
+
+static void
+print_frame_buf(void)
+{
+	print_hex_seq("frame buf: 0x", frame_buf, frame_buf_len);
 }
 
 static const struct command cmd_list[] =    {
@@ -1249,10 +1284,14 @@ static const struct command cmd_list[] =    {
  /* {'s', "CC2420 status byte", status}, */
  {'b', "Battery level", battery_level},
  {'N', "Burn node id", burn_node_id},
- {'R', "Read TXFIFO", read_tx_fifo},
+ {'T', "Read TXFIFO", read_tx_fifo},
  {'W', "Write TXFIFO", write_tx_fifo},
- {'F', "Read RXFIFO", read_rx_fifo},
+ {'R', "Read RXFIFO", read_rx_fifo},
  {'a', "Assemble packet from chunks", assemble_packet_from_chunks},
+ {'o', "Copy current droplet to chunk buffer", droplet_to_chunk},
+ {'c', "Print chunks", print_chunks},
+ {'D', "Print droplet", print_droplet},
+ {'B', "Print frame buf", print_frame_buf},
 };
 
 void
@@ -1336,10 +1375,10 @@ PROCESS_THREAD(test_process, ev, data)
 /* const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!") */
 
 		    size_t slen = strlen((char *)data);
-		    memcpy(tx_buf, glossy_data_pkt_payload, 8);
-		    tx_buf[5] = 1;
-		    memcpy(&tx_buf[8], data, slen);
-		    tx_buf_len = 8 + slen;
+		    memcpy(frame_buf, glossy_data_pkt_payload, 8);
+		    frame_buf[5] = 1;
+		    memcpy(&frame_buf[8], data, slen);
+		    frame_buf_len = 8 + slen;
 		    escape = 0;
 	    } else if (alt) {
 		    /* read string as hex sequence into chunk buf */
