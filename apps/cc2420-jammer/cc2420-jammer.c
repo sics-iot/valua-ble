@@ -37,27 +37,8 @@
  *         Zhitao He <zhitao@sics.se>
  */
 
-#include "dev/button-sensor.h"
-#include "contiki.h"
-#include "net/rime/rime.h"
-#include "dev/leds.h"
-#include "dev/serial-line.h"
-#include "dev/spi.h"
-
-#include "cc2420.h"
-#include "dev/cc2420/cc2420_const.h"
-#include "lib/random.h"
-#include "dev/radio.h"
-#include "dev/watchdog.h"
-#include "lib/crc16.h"
-#include "sys/node-id.h"
 #include "cc2420-jammer.h"
 #include "commands.h"
-
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
 
 #define DEBUG 1
 #if DEBUG
@@ -112,6 +93,11 @@ extern int cc2420_packets_seen, cc2420_packets_read;
 extern volatile int jam_ena;
 extern const uint8_t jam_data[6];
 
+long int sum_rssi;
+long unsigned sum_lqi;
+int min_rssi = 15, max_rssi = -55;
+unsigned min_lqi = 108, max_lqi = 0;
+
 static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
@@ -136,8 +122,15 @@ struct hex_seq
 	const size_t size;
 };
 
+/* frame buffer for transmission */
 static uint8_t frame_buf[128];
-static int frame_buf_len;
+static size_t frame_buf_len;
+static int frame_buf_byte_id;
+
+/* hex stream buffer from serial input */
+static uint8_t *hex_ibuf_ptr;
+/* static uint8_t hex_ibuf[64]; */
+static size_t hex_ibuf_len;
 
 /* A byte buffer with a size */
 struct hex_buf {
@@ -145,13 +138,9 @@ struct hex_buf {
 	size_t bufsize;
 };
 
-static struct hex_buf chunks[4];
+#define NCHUNKS 4
+static struct hex_buf chunks[NCHUNKS];
 static int chunk_index;
-
-long int sum_rssi;
-long unsigned sum_lqi;
-int min_rssi = 15, max_rssi = -55;
-unsigned min_lqi = 108, max_lqi = 0;
 
 /* Drizzle mode content */
 // No. zero preamble nimbles should be equal or greater than target network's SYNWORD setting in order to trigger RF synchronization.
@@ -192,10 +181,11 @@ static struct variable const variable_list[] = {
 	{'m', (union number*)&rp_en, sizeof(rp_en), "reverse phase enabled", 0, 1},
 	{'e', (union number*)&escape, sizeof(escape), "serial escape", 0, 1},
 	{'a', (union number*)&alt, sizeof(alt), "serial alternative", 0, 1},
-	{'c', (union number*)&chunk_index, sizeof(chunk_index), "chunk_index", 0, sizeof(chunks) / sizeof(chunks[0]) -1},
+	{'c', (union number*)&chunk_index, sizeof(chunk_index), "chunk_index", 0, NCHUNKS -1},
 	{'C', (union number*)&manual_crc, sizeof(manual_crc), "manual_crc", 0, 1},
 	{'x', (union number*)&tx_source, sizeof(tx_source), "tx_source", 0, MAX_TX_SOURCE - 1},
 	{'P', (union number*)&prepend_phy_hdr, sizeof(prepend_phy_hdr), "prepend_phy_hdr", 0, 1},
+	{'B', (union number*)&frame_buf_byte_id, sizeof(frame_buf_byte_id), "frame_buf_byte_id", 0, sizeof(frame_buf) - 1},
 };
 
 const static struct field field_list[] = {
@@ -344,27 +334,17 @@ pad(uint8_t* dst, size_t dst_len, const uint8_t* src, const size_t src_len, void
 
 /*---------------------------------------------------------------------------*/
 static void
-print_hex_seq(const char *prefix, const uint8_t *data, size_t size)
-{
-	int i;
-	char dbuf[size*2+1];
-	char *dbuf_ptr = dbuf;
-	for(i = 0;i < size;++i){
-		dbuf_ptr += snprintf(dbuf_ptr, sizeof(dbuf), "%02x", data[i]);
-	}
-	printf("%s%s\n", prefix, dbuf);
-}
-
-static void
-print_hex_buf(const char *prefix, uint8_t *buf, size_t bufsize)
+print_hex_buf(const char *prefix, const uint8_t *buf, size_t bufsize)
 {
 	int i;
 	char dbuf[bufsize*2+1];
 	char *dbuf_ptr = dbuf;
-	for(i = 0;i < bufsize;++i){
-		dbuf_ptr += snprintf(dbuf_ptr, sizeof(dbuf), "%02x", buf[i]);
+	if (buf && bufsize) {
+		for(i = 0;i < bufsize;++i){
+			dbuf_ptr += snprintf(dbuf_ptr, sizeof(dbuf), "%02x", buf[i]);
+		}
+		printf("%s%s\n", prefix, dbuf);
 	}
-	printf("%s%s\n", prefix, dbuf);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -635,7 +615,7 @@ drizzle_mode(int new_mode)
 	} else if (tx_source == TX_SOURCE_DROPLETS) {
 		/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
 		// Debug print
-		print_hex_seq("Drizzle payload: ", droplets[droplet_index].data, droplets[droplet_index].size);
+		print_hex_buf("Drizzle payload: ", droplets[droplet_index].data, droplets[droplet_index].size);
 
 		buflen = droplets[droplet_index].size;
 		memcpy(pbuf, droplets[droplet_index].data, buflen);
@@ -650,7 +630,7 @@ drizzle_mode(int new_mode)
 	/* Optional: reverse phase of payload */
 	if (rp_en) {
 		reverse_phase(pbuf, buflen);
-		print_hex_seq("RP buf: ", buf, buflen);
+		print_hex_buf("RP buf: ", buf, buflen);
 	}
 	/* Optional: append payload with manual CRC, instead of no CRC */
 	if (manual_crc) {
@@ -658,7 +638,7 @@ drizzle_mode(int new_mode)
 		/* printf("checksum = %4x\n", checksum); */
 		pbuf[buflen] = checksum & 0xFF;
 		pbuf[buflen+1] = checksum >> 8;
-		print_hex_seq("tx packet (with CRC): ", pbuf, buflen+2);
+		print_hex_buf("tx packet (with CRC): ", pbuf, buflen+2);
 		buflen += 2;
 	}
 
@@ -673,7 +653,7 @@ drizzle_mode(int new_mode)
 	pad(txfifo_data, sizeof(txfifo_data), buf, buflen, NULL);
 
 	// Debug print
-	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
+	print_hex_buf("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
 	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
@@ -745,7 +725,7 @@ tx_eth(void)
 		} else if (tx_source == TX_SOURCE_DROPLETS) {
 			/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
 			// Debug print
-			print_hex_seq("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+			print_hex_buf("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
 
 			buflen = droplets[droplet_index].size;
 			memcpy(buf, droplets[droplet_index].data, buflen);
@@ -760,7 +740,7 @@ tx_eth(void)
 		/* Optional: reverse phase of droplet */
 		if (rp_en) {
 			reverse_phase(buf, buflen);
-			print_hex_seq("RP buf: ", buf, buflen);
+			print_hex_buf("RP buf: ", buf, buflen);
 		}
 		/* Optional: append payload with manual CRC instead of auto CRC */
 		if (manual_crc) {
@@ -768,7 +748,7 @@ tx_eth(void)
 		/* printf("checksum = %4x\n", checksum); */
 		buf[buflen] = checksum & 0xFF;
 		buf[buflen+1] = checksum >> 8;
-		print_hex_seq("tx packet (with CRC): ", buf, buflen+2);
+		print_hex_buf("tx packet (with CRC): ", buf, buflen+2);
 		uint16_t reg = getreg(CC2420_MDMCTRL0);
 		reg &= ~AUTOCRC;
 		setreg(CC2420_MDMCTRL0, reg);
@@ -1218,7 +1198,7 @@ assemble_packet_from_chunks(void)
 {
 	int i;
 	uint8_t *p = frame_buf;
-	for (i = 0; i < sizeof(chunks) / sizeof(chunks[0]); i++) {
+	for (i = 0; i < NCHUNKS; i++) {
 		if (chunks[i].bufsize) {
 			memcpy(p, chunks[i].buf, chunks[i].bufsize);
 			p += chunks[i].bufsize;
@@ -1239,15 +1219,30 @@ droplet_to_chunk(void)
 	chunks[chunk_index].buf = malloc(chunk_size);
 	memcpy(chunks[chunk_index].buf, droplets[droplet_index].data, chunk_size);
 	chunks[chunk_index].bufsize = chunk_size;
-	printf("chunk %d: ", chunk_index);
+	printf("chunk [%d]: ", chunk_index);
 	print_hex_buf("0x", chunks[chunk_index].buf, chunk_size);
+}
+
+static void
+hex_ibuf_to_chunk(void)
+{
+	if (chunks[chunk_index].buf) {
+		free(chunks[chunk_index].buf);
+	}
+	if (hex_ibuf_ptr && hex_ibuf_len > 0) {
+		chunks[chunk_index].buf = malloc(hex_ibuf_len);
+		memcpy(chunks[chunk_index].buf, hex_ibuf_ptr, hex_ibuf_len);
+		chunks[chunk_index].bufsize = hex_ibuf_len;
+		printf("chunk[%d]: ", chunk_index);
+		print_hex_buf("0x", chunks[chunk_index].buf, chunks[chunk_index].bufsize);
+	}
 }
 
 static void
 print_chunks(void)
 {
 	int i;
-	for (i=0; i<sizeof(chunks)/sizeof(chunks[0]); i++) {
+	for (i=0; i<NCHUNKS; i++) {
 		printf("chunk %d: ", i);
 		print_hex_buf("0x", chunks[i].buf, chunks[i].bufsize);
 	}
@@ -1257,13 +1252,22 @@ static void
 print_droplet(void)
 {
 	printf("droplet %u", droplet_index);
-	print_hex_seq("0x", droplets[droplet_index].data, droplets[droplet_index].size);
+	print_hex_buf("0x", droplets[droplet_index].data, droplets[droplet_index].size);
 }
 
 static void
 print_frame_buf(void)
 {
-	print_hex_seq("frame buf: 0x", frame_buf, frame_buf_len);
+	print_hex_buf("frame buf: 0x", frame_buf, frame_buf_len);
+}
+
+static void
+update_frame_buf_byte(void)
+{
+	if (frame_buf_byte_id < frame_buf_len) {
+		frame_buf[frame_buf_byte_id]++;
+	}
+	print_frame_buf();
 }
 
 static const struct command cmd_list[] =    {
@@ -1288,10 +1292,12 @@ static const struct command cmd_list[] =    {
  {'W', "Write TXFIFO", write_tx_fifo},
  {'R', "Read RXFIFO", read_rx_fifo},
  {'a', "Assemble packet from chunks", assemble_packet_from_chunks},
- {'o', "Copy current droplet to chunk buffer", droplet_to_chunk},
+ {'o', "Copy droplet to chunk buffer", droplet_to_chunk},
+ {'x', "Copy hex input buffer to chunk buffer", hex_ibuf_to_chunk},
  {'c', "Print chunks", print_chunks},
  {'D', "Print droplet", print_droplet},
- {'B', "Print frame buf", print_frame_buf},
+ {'f', "Print frame buf", print_frame_buf},
+ {'B', "Update frame buf byte", update_frame_buf_byte},
 };
 
 void
@@ -1309,7 +1315,7 @@ PROCESS_THREAD(test_process, ev, data)
 
 	/* pre-fill pseudo random data for TXFIFO */
 	pad(txfifo_data, sizeof(txfifo_data), droplets[droplet_index].data, droplets[droplet_index].size, inc_first_byte);
-	print_hex_seq("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
+	print_hex_buf("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	// change MAC address
 	unsigned shortaddr;
@@ -1372,7 +1378,7 @@ PROCESS_THREAD(test_process, ev, data)
 		    /* /\* transmit message over air *\/ */
 		    /* (void)cc2420_driver.send(data, strlen((char *)data)); */
 		    /* fill frame buf with glossy broadcast data packet header followed by string as payload */
-/* const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!") */
+/* const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + no. pkts in queue (1B) + data option (1B) + usr payload ("Hi!") */
 
 		    size_t slen = strlen((char *)data);
 		    memcpy(frame_buf, glossy_data_pkt_payload, 8);
@@ -1381,17 +1387,17 @@ PROCESS_THREAD(test_process, ev, data)
 		    frame_buf_len = 8 + slen;
 		    escape = 0;
 	    } else if (alt) {
-		    /* read string as hex sequence into chunk buf */
-		    if (chunks[chunk_index].buf) {
-			    free(chunks[chunk_index].buf);
+		    /* convert string as a hex sequence into buffer */
+		    if (hex_ibuf_ptr) {
+			    free(hex_ibuf_ptr);
 		    }
-		    size_t chunk_size = strlen((char *)data) / 2;
-		    void *p = malloc(chunk_size);
-		    chunks[chunk_index].bufsize = fill_hex_buf(data, strlen((char *)data), p , chunk_size);
-		    if (chunks[chunk_index].bufsize > 0) {
-			    chunks[chunk_index].buf = p;
-			    print_hex_seq("", chunks[chunk_index].buf, chunks[chunk_index].bufsize);
+		    hex_ibuf_len = strlen((char *)data) / 2;
+		    hex_ibuf_ptr = malloc(hex_ibuf_len);
+		    hex_ibuf_len = fill_hex_buf(data, strlen((char *)data), hex_ibuf_ptr, hex_ibuf_len);
+		    if (hex_ibuf_len > 0) {
+			    print_hex_buf("", hex_ibuf_ptr, hex_ibuf_len);
 		    }
+		    printf("hex_ibuf_len = %u\n", hex_ibuf_len);
 		    alt = 0;
 	    }
     } else if(ev == sensors_event && data == &button_sensor) {
@@ -1407,18 +1413,6 @@ int
 decision(long int n, uint8_t len, uint8_t *buf)
 {
 	return (n % 2 == 1);
-	/* if(len > 0) { */
-	/* 	if(random_rand() < ((uint16_t)(~0) / 5)) { */
-	/* 		return 1; */
-	/* 	} */
-	/* }  */
-	/* if(len == 43) { */
-	/* 	return 1; */
-	/* } */
-	/* if(buf[7] == 0x00 && buf[8] == 0x00 && buf[0] == 0x41) { */
-	/* 	return 1; */
-	/* } */
-	/* return 0; */
 }
 
 /*---------------------------------------------------------------------------*/

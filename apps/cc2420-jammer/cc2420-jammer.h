@@ -1,6 +1,25 @@
 #ifndef CC2420_JAMMER
 #define CC2420_JAMMER
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <inttypes.h>
+
+#include "contiki.h"
+#include "dev/button-sensor.h"
+#include "net/rime/rime.h"
+#include "dev/leds.h"
+#include "dev/serial-line.h"
+#include "dev/spi.h"
+#include "cc2420.h"
+#include "dev/cc2420/cc2420_const.h"
+#include "lib/random.h"
+#include "dev/radio.h"
+#include "dev/watchdog.h"
+#include "lib/crc16.h"
+#include "sys/node-id.h"
+
 #define RX 0
 #define TX 1
 #define DROPLET 2
