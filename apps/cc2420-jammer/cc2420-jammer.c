@@ -1382,7 +1382,7 @@ PROCESS_THREAD(test_process, ev, data)
 
 		    size_t slen = strlen((char *)data);
 		    memcpy(frame_buf, glossy_data_pkt_payload, 8);
-		    frame_buf[5] = 1;
+		    frame_buf[5] = slen;
 		    memcpy(&frame_buf[8], data, slen);
 		    frame_buf_len = 8 + slen;
 		    escape = 0;
