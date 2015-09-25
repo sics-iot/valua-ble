@@ -121,6 +121,12 @@ typedef unsigned long off_t;
 #define GPIO2_PORT(type)   P2##type
 #define GPIO2_PIN          1
 
+/* ADC ports */
+#define ADC0_PORT(type)   P6##type
+#define ADC0_PIN          0
+#define ADC1_PORT(type)   P6##type
+#define ADC1_PIN          1
+
 /* DCO speed resynchronization for more robust UART, etc. */
 #define DCOSYNCH_CONF_ENABLED 0
 #define DCOSYNCH_CONF_PERIOD 30

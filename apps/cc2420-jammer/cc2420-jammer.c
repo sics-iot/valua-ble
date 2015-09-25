@@ -658,7 +658,7 @@ drizzle_mode(int new_mode)
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
 	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
 	send_carrier(mode);
-
+	ADC0_PORT(OUT) |= BV(ADC0_PIN); // flock lab io tracing signal INT1
 	// TEST: automatically update Drizzle content continuously during transmssion
 	/* if (!seq.data[0] && !seq.data[1] && !seq.data[2]) { */
 	/* 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND/256, 0, update_txfifo, (void *)1); */
@@ -822,6 +822,7 @@ attack_eth(void)
 	etimer_stop(&et);
 	rt.ptr = NULL; 		// stop rtimer
 	reset_transmitter();
+	ADC0_PORT(OUT) &= ~BV(ADC0_PIN);
 	printf("Finished transmission after %lu seconds\n",
 				 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
 }
@@ -1340,6 +1341,10 @@ PROCESS_THREAD(test_process, ev, data)
 	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
 	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
+
+	/* init ADC pins */
+	ADC0_PORT(DIR) |= BV(ADC0_PIN);
+	ADC1_PORT(DIR) |= BV(ADC1_PIN);
 
 	/* Change channel */
   cc2420_set_channel(CHANNEL);
