@@ -64,6 +64,7 @@
 #define TXPOWER_LEVEL 3
 
 #define TX_INTERVAL (CLOCK_SECOND / 32)
+#define ATTACK_GAP (CLOCK_SECOND * 4)
 #define MAX_TX_PACKETS 10
 #define PAYLOAD_LEN 20
 /* exprimental value used to occupy near full bandwidth, assuming RIMTER_SECOND = 4096 * N */
@@ -72,6 +73,7 @@
 #define RTIMER_INTERVAL ((RTIMER_SECOND + (225/2)) / 225 )
 #define DST_ADDR0 2
 #define DST_ADDR1 0
+#define MAX_ATTACK_COUNT 1
 
 #define AUTOACK (1 << 4)
 #define ADR_DECODE (1 << 11)
@@ -89,6 +91,9 @@
 #define TX_MODE_2 (2<<2)
 #define TX_MODE_3 (3<<2)
 
+void
+start_mode(int new_mode);
+
 extern int cc2420_packets_seen, cc2420_packets_read;
 extern volatile int jam_ena;
 extern const uint8_t jam_data[6];
@@ -101,6 +106,7 @@ unsigned min_lqi = 108, max_lqi = 0;
 static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
+static clock_time_t attack_gap = ATTACK_GAP;
 static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
@@ -111,10 +117,13 @@ static uint8_t alt = 0;
 static uint8_t tx_source = TX_SOURCE_SEQNO;
 static uint8_t manual_crc = 0;
 static uint8_t prepend_phy_hdr = 0;
+static uint16_t max_attack_count = MAX_ATTACK_COUNT;
 
 static struct etimer et;
 static struct rtimer rt;
 static uint16_t seqno;
+static uint16_t attack_count;
+static int attack_on;
 /* A byte sequence of certain length */
 struct hex_seq
 {
@@ -186,6 +195,8 @@ static struct variable const variable_list[] = {
 	{'x', (union number*)&tx_source, sizeof(tx_source), "tx_source", 0, MAX_TX_SOURCE - 1},
 	{'P', (union number*)&prepend_phy_hdr, sizeof(prepend_phy_hdr), "prepend_phy_hdr", 0, 1},
 	{'B', (union number*)&frame_buf_byte_id, sizeof(frame_buf_byte_id), "frame_buf_byte_id", 0, sizeof(frame_buf) - 1},
+	{'g', (union number*)&attack_gap, sizeof(attack_gap), "attack_gap", 0, (unsigned)~0},
+	{'A', (union number*)&max_attack_count, sizeof(max_attack_count), "max_attack_count", 0, (uint16_t)~0},
 };
 
 const static struct field field_list[] = {
@@ -599,6 +610,15 @@ drizzle_mode(int new_mode)
 	size_t buflen;
 	uint8_t *pbuf = buf;
 
+	if (!attack_count) {
+		attack_count++;
+		attack_on = 1;
+		printf("attack begins\n");
+	} else {
+		attack_count++;
+		goto start_attack;
+	}
+
 	/* Optional: reserve 3 bytes for 802.15.4 Preamble, SFD and LEN */
 	if (prepend_phy_hdr) {
 		pbuf += 3;
@@ -656,9 +676,12 @@ drizzle_mode(int new_mode)
 	print_hex_buf("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
-	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND);
+ start_attack:
+	/* etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND); */
+	etimer_set(&et, max_tx_packets * tx_interval);
 	send_carrier(mode);
-	ADC0_PORT(OUT) |= BV(ADC0_PIN); // flock lab io tracing signal INT1
+	ADC1_PORT(OUT) |= BV(ADC1_PIN); // flock lab io tracing signal INT1
+	leds_on(LEDS_RED);
 	// TEST: automatically update Drizzle content continuously during transmssion
 	/* if (!seq.data[0] && !seq.data[1] && !seq.data[2]) { */
 	/* 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND/256, 0, update_txfifo, (void *)1); */
@@ -819,12 +842,28 @@ cs_eth(void)
 static void
 attack_eth(void)
 {
-	etimer_stop(&et);
-	rt.ptr = NULL; 		// stop rtimer
-	reset_transmitter();
-	ADC0_PORT(OUT) &= ~BV(ADC0_PIN);
-	printf("Finished transmission after %lu seconds\n",
-				 (et.timer.interval + CLOCK_SECOND/2) / CLOCK_SECOND);
+
+	if (attack_on) {
+		attack_on = 0;
+		ADC1_PORT(OUT) &= ~BV(ADC1_PIN);
+		leds_off(LEDS_RED);
+		if (attack_count < max_attack_count) {
+			printf("attack paused after %lu ms, resumes in %lu ms\n",
+			       (et.timer.interval * 1000 + CLOCK_SECOND/2) / CLOCK_SECOND,
+			       (attack_gap * 1000 + CLOCK_SECOND/2) / CLOCK_SECOND);
+			etimer_set(&et, attack_gap);
+		} else {
+			etimer_stop(&et);
+			rt.ptr = NULL; 		// stop rtimer
+			attack_count = 0;
+			reset_transmitter();
+			printf("attack finished after %u attacks\n", max_attack_count);
+		}
+	}	else {
+		attack_on = 1;
+		start_mode(mode);
+		printf("attack resumes %u/%u\n", attack_count, max_attack_count);
+	}
 }
 
 struct mode {
@@ -1342,9 +1381,14 @@ PROCESS_THREAD(test_process, ev, data)
 	GPIO2_PORT(OUT) |= BV(GPIO2_PIN);
 	GPIO2_PORT(OUT) &= ~BV(GPIO2_PIN);
 
-	/* init ADC pins */
+	/* init ADC pins as digital outputs */
+	ADC0_PORT(SEL) &= ~BV(ADC0_PIN);
 	ADC0_PORT(DIR) |= BV(ADC0_PIN);
+	ADC1_PORT(SEL) &= ~BV(ADC1_PIN);
 	ADC1_PORT(DIR) |= BV(ADC1_PIN);
+	ADC1_PORT(OUT) &= ~BV(ADC1_PIN);
+	ADC1_PORT(OUT) |= BV(ADC1_PIN);
+	ADC1_PORT(OUT) &= ~BV(ADC1_PIN);
 
 	/* Change channel */
   cc2420_set_channel(CHANNEL);
