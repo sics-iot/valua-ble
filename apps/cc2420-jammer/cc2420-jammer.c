@@ -63,9 +63,9 @@
 #define CHANNEL 20
 #define TXPOWER_LEVEL 3
 
-#define TX_INTERVAL (CLOCK_SECOND / 32)
+#define TX_INTERVAL (CLOCK_SECOND / 1)
 #define ATTACK_GAP (CLOCK_SECOND * 4)
-#define MAX_TX_PACKETS 10
+#define MAX_TX_PACKETS 1
 #define PAYLOAD_LEN 20
 /* exprimental value used to occupy near full bandwidth, assuming RIMTER_SECOND = 4096 * N */
 /* "SFD gap" = 298 us out of 4395 us Droplet interval => actual free air time = 298 - 160 (preamble+SFD) = 138 us => free bandwidth = 138/4395 = 3.1% */
@@ -114,12 +114,12 @@ static uint8_t len_hdr = 127;
 static uint8_t rp_en = 0;
 static uint8_t escape = 0;
 static uint8_t alt = 0;
-static uint8_t tx_source = TX_SOURCE_SEQNO;
-static uint8_t manual_crc = 0;
-static uint8_t prepend_phy_hdr = 0;
+static uint8_t tx_source = TX_SOURCE_DROPLETS;
+static uint8_t manual_crc = 1;
+static uint8_t prepend_phy_hdr = 1;
 static uint16_t max_attack_count = MAX_ATTACK_COUNT;
 
-static struct etimer et;
+static struct etimer et, et_run;
 static struct rtimer rt;
 static uint16_t seqno;
 static uint16_t attack_count;
@@ -163,7 +163,7 @@ const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x9
 const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA4}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
-const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!")
+const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!")
 
 const static struct hex_seq droplets[] =	{
 	{sfd_2z, sizeof(sfd_2z)},
@@ -926,6 +926,17 @@ et_handler(void)
 	}
 }
 
+/*-----------------------------------------------------------------------------*/
+/* Test run etimer timeout handler */
+static void
+et_run_handler(void)
+{
+	/* if (run_ptr->next) { */
+	/* 	run_ptr = run_ptr->next; */
+	/* 	start_mode(run_ptr->mode); */
+	/* } */
+}
+
 /*---------------------------------------------------------------------------*/
 // radio receiver callback
 /* static uint16_t rxbuf[64]; */
@@ -1417,8 +1428,13 @@ PROCESS_THREAD(test_process, ev, data)
 
   while(1) {
     PROCESS_WAIT_EVENT();
-    if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
-			et_handler();
+    if(ev == PROCESS_EVENT_TIMER) {
+	    if (etimer_expired(&et)) {
+		    et_handler();
+	    }
+	    if (etimer_expired(&et_run)) {
+		    et_run_handler();
+	    }
     } else if(ev == serial_line_event_message) {
 	    if (!escape && !alt) {
 		    /* Command handlers */
