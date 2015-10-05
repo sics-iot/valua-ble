@@ -60,7 +60,7 @@
 		byte = ((byte) & 0x77) | ((~(byte)) & 0x88); \
 	} while(0)
 
-#define CHANNEL 20
+#define CHANNEL 26
 #define TXPOWER_LEVEL 3
 
 #define TX_INTERVAL (CLOCK_SECOND / 1)
@@ -138,7 +138,6 @@ static int frame_buf_byte_id;
 
 /* hex stream buffer from serial input */
 static uint8_t *hex_ibuf_ptr;
-/* static uint8_t hex_ibuf[64]; */
 static size_t hex_ibuf_len;
 
 /* A byte buffer with a size */
@@ -160,10 +159,10 @@ const static uint8_t sfd_3z[] = {0x06, 0x00, 0xA7, 127};
 const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
 const static uint8_t all_zeros[128];
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
-const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA4}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
+const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA3}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
-const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + (0x0, 0x0)? + usr payload ("Hi!")
+const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0xEE, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + no. pkts in queue (1B) + data option (1B) + usr payload ("Hi!")
 
 const static struct hex_seq droplets[] =	{
 	{sfd_2z, sizeof(sfd_2z)},
@@ -575,29 +574,29 @@ droplet_mode(int new_mode)
 }
 
 // Periodic TXFIFO update (used during Drizzle transmission)
-static void
-update_txfifo(struct rtimer *t, void *ptr)
-{
-	// packet consists of a sequence number
-#define HLEN 5 // header len : preamble+sync+payload_len
-#define PLEN 2 // payload len
-#define CLEN 2 // checksum len
-	static uint8_t snippet[HLEN+PLEN+CLEN] = {0x00, 0x00, 0x00, 0xCD, PLEN+CLEN};
-	unsigned short checksum;
-	static uint16_t seqno;
+/* static void */
+/* update_txfifo(struct rtimer *t, void *ptr) */
+/* { */
+/* 	// packet consists of a sequence number */
+/* #define HLEN 5 // header len : preamble+sync+payload_len */
+/* #define PLEN 2 // payload len */
+/* #define CLEN 2 // checksum len */
+/* 	static uint8_t snippet[HLEN+PLEN+CLEN] = {0x00, 0x00, 0x00, 0xCD, PLEN+CLEN}; */
+/* 	unsigned short checksum; */
+/* 	static uint16_t seqno; */
 
-	seqno = ptr ? 0 : seqno+1;
-	snippet[HLEN] = (uint8_t)(seqno & 0xFF);
-	snippet[HLEN+1] = (uint8_t)(seqno >> 8);
+/* 	seqno = ptr ? 0 : seqno+1; */
+/* 	snippet[HLEN] = (uint8_t)(seqno & 0xFF); */
+/* 	snippet[HLEN+1] = (uint8_t)(seqno >> 8); */
 
-	checksum = crc16_data(&snippet[HLEN], PLEN, 0);
-	snippet[PLEN+HLEN] = (uint8_t)(checksum & 0xFF);
-	snippet[PLEN+HLEN+1] = (uint8_t)(checksum >> 8);
+/* 	checksum = crc16_data(&snippet[HLEN], PLEN, 0); */
+/* 	snippet[PLEN+HLEN] = (uint8_t)(checksum & 0xFF); */
+/* 	snippet[PLEN+HLEN+1] = (uint8_t)(checksum >> 8); */
 
-	CC2420_WRITE_RAM(&snippet, CC2420RAM_TXFIFO, HLEN+PLEN+CLEN);
+/* 	CC2420_WRITE_RAM(&snippet, CC2420RAM_TXFIFO, HLEN+PLEN+CLEN); */
 
-	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND*4096L/1000000L+1, 0, update_txfifo, (void *)0);
-}
+/* 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND*4096L/1000000L+1, 0, update_txfifo, (void *)0); */
+/* } */
 
 static void
 drizzle_mode(int new_mode)
@@ -1121,7 +1120,7 @@ mac_update(void)
 	unsigned shortaddr;
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	// increment higher byte and clear lower byte, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
-	shortaddr = ((shortaddr+0x0100) % 0x2000) & 0xFF00;
+	shortaddr = ((shortaddr+0x0100) % 0x4000) & 0xFF00;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	printf("16-bit MAC address: 0x%04X\n", shortaddr);
 }
@@ -1457,12 +1456,12 @@ PROCESS_THREAD(test_process, ev, data)
 			    free(hex_ibuf_ptr);
 		    }
 		    hex_ibuf_len = strlen((char *)data) / 2;
+		    printf("hex_ibuf_len = %u\n", hex_ibuf_len);
 		    hex_ibuf_ptr = malloc(hex_ibuf_len);
 		    hex_ibuf_len = fill_hex_buf(data, strlen((char *)data), hex_ibuf_ptr, hex_ibuf_len);
 		    if (hex_ibuf_len > 0) {
 			    print_hex_buf("", hex_ibuf_ptr, hex_ibuf_len);
 		    }
-		    printf("hex_ibuf_len = %u\n", hex_ibuf_len);
 		    alt = 0;
 	    }
     } else if(ev == sensors_event && data == &button_sensor) {
