@@ -64,7 +64,7 @@
 #define TXPOWER_LEVEL 3
 
 #define TX_INTERVAL (CLOCK_SECOND / 1)
-#define ATTACK_GAP (CLOCK_SECOND * 4)
+#define ATTACK_GAP (CLOCK_SECOND * 1)
 #define MAX_TX_PACKETS 1
 #define PAYLOAD_LEN 20
 /* exprimental value used to occupy near full bandwidth, assuming RIMTER_SECOND = 4096 * N */
@@ -161,7 +161,7 @@ const static uint8_t all_zeros[128];
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
 const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA3}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
-const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x03, 0x00, 0x3e, 0x5d, 0x00, 0x01, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
+const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x21, 0x00, 0x3e, 0x5d, 0x00, 0x02, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0xEE, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + no. pkts in queue (1B) + data option (1B) + usr payload ("Hi!")
 
 const static struct hex_seq droplets[] =	{
@@ -194,7 +194,7 @@ static struct variable const variable_list[] = {
 	{'x', (union number*)&tx_source, sizeof(tx_source), "tx_source", 0, MAX_TX_SOURCE - 1},
 	{'P', (union number*)&prepend_phy_hdr, sizeof(prepend_phy_hdr), "prepend_phy_hdr", 0, 1},
 	{'B', (union number*)&frame_buf_byte_id, sizeof(frame_buf_byte_id), "frame_buf_byte_id", 0, sizeof(frame_buf) - 1},
-	{'g', (union number*)&attack_gap, sizeof(attack_gap), "attack_gap", 0, (unsigned)~0},
+	{'G', (union number*)&attack_gap, sizeof(attack_gap), "attack_gap", 0, (unsigned)~0},
 	{'A', (union number*)&max_attack_count, sizeof(max_attack_count), "max_attack_count", 0, (uint16_t)~0},
 };
 
@@ -343,6 +343,7 @@ pad(uint8_t* dst, size_t dst_len, const uint8_t* src, const size_t src_len, void
 }
 
 /*---------------------------------------------------------------------------*/
+/* Print HEX buffer content */
 static void
 print_hex_buf(const char *prefix, const uint8_t *buf, size_t bufsize)
 {
@@ -357,23 +358,6 @@ print_hex_buf(const char *prefix, const uint8_t *buf, size_t bufsize)
 	}
 }
 
-/*---------------------------------------------------------------------------*/
-/* CC2420 Serial TX mode */
-/* static void */
-/* send_serial(struct rtimer *t, void *ptr) */
-/* { */
-/* 		if (ptr) { */
-/* 			/\* schedule next send *\/ */
-/* 			rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND / 2, 0, send_serial, (void *)1); */
-		
-/* 			/\* Test: set first transmitted bit = 1 *\/ */
-/* 			CC2420_FIFO_PORT(OUT) |= BV(CC2420_FIFO_PIN); */
-/* 			/\* Start serial data transmission *\/ */
-/* 			CC2420_CLEAR_FIFOP_INT(); */
-/* 			CC2420_ENABLE_FIFOP_INT(); */
-/* 			strobe(CC2420_STXON); */
-/* 		} */
-/* } */
 /*---------------------------------------------------------------------------*/
 /* Periodic Droplet transmission */
 static void
@@ -678,7 +662,7 @@ drizzle_mode(int new_mode)
  start_attack:
 	/* etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND); */
 	etimer_set(&et, max_tx_packets * tx_interval);
-	send_carrier(mode);
+	send_carrier(new_mode);
 	ADC1_PORT(OUT) |= BV(ADC1_PIN); // flock lab io tracing signal INT1
 	leds_on(LEDS_RED);
 	// TEST: automatically update Drizzle content continuously during transmssion
@@ -1243,6 +1227,7 @@ battery_level(void)
 	setreg(CC2420_BATTMON, SETFV(reg, lv_orig, 4, 0)); // restore original monitor level
 }
 
+/* Assemble chunks into frame buf */
 static void
 assemble_packet_from_chunks(void)
 {
@@ -1312,7 +1297,7 @@ print_frame_buf(void)
 }
 
 static void
-update_frame_buf_byte(void)
+increment_frame_buf_byte(void)
 {
 	if (frame_buf_byte_id < frame_buf_len) {
 		frame_buf[frame_buf_byte_id]++;
@@ -1347,7 +1332,7 @@ static const struct command cmd_list[] =    {
  {'c', "Print chunks", print_chunks},
  {'D', "Print droplet", print_droplet},
  {'f', "Print frame buf", print_frame_buf},
- {'B', "Update frame buf byte", update_frame_buf_byte},
+ {'B', "Increment frame buf byte", increment_frame_buf_byte},
 };
 
 void
@@ -1436,20 +1421,17 @@ PROCESS_THREAD(test_process, ev, data)
 	    }
     } else if(ev == serial_line_event_message) {
 	    if (!escape && !alt) {
-		    /* Command handlers */
+		    /* execute command */
 		    do_command((char *)data);
 	    } else if (escape) {
-		    /* /\* transmit message over air *\/ */
-		    /* (void)cc2420_driver.send(data, strlen((char *)data)); */
-		    /* fill frame buf with glossy broadcast data packet header followed by string as payload */
-/* const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0x04, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 'H', 'i', '!'}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + no. pkts in queue (1B) + data option (1B) + usr payload ("Hi!") */
-
+		    /* copy command to frame buf, as the payload of a glossy data packet */
 		    size_t slen = strlen((char *)data);
 		    memcpy(frame_buf, glossy_data_pkt_payload, 8);
 		    frame_buf[5] = slen;
 		    memcpy(&frame_buf[8], data, slen);
 		    frame_buf_len = 8 + slen;
 		    escape = 0;
+		    printf("serial escape=%u\n", escape);
 	    } else if (alt) {
 		    /* convert string as a hex sequence into buffer */
 		    if (hex_ibuf_ptr) {
@@ -1463,6 +1445,7 @@ PROCESS_THREAD(test_process, ev, data)
 			    print_hex_buf("", hex_ibuf_ptr, hex_ibuf_len);
 		    }
 		    alt = 0;
+		    printf("serial alternative=%u\n", alt);
 	    }
     } else if(ev == sensors_event && data == &button_sensor) {
       start_mode((mode + 1) % NUM_MODES);
@@ -1470,13 +1453,6 @@ PROCESS_THREAD(test_process, ev, data)
   }
 
   PROCESS_END();
-}
-
-/*---------------------------------------------------------------------------*/
-int
-decision(long int n, uint8_t len, uint8_t *buf)
-{
-	return (n % 2 == 1);
 }
 
 /*---------------------------------------------------------------------------*/
