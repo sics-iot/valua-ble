@@ -112,8 +112,8 @@ static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
 static uint8_t len_hdr = 127;
 static uint8_t rp_en = 0;
-static uint8_t escape = 0;
-static uint8_t alt = 0;
+static uint8_t air = 0;
+static uint8_t hexin = 0;
 static uint8_t tx_source = TX_SOURCE_DROPLETS;
 static uint8_t manual_crc = 1;
 static uint8_t prepend_phy_hdr = 1;
@@ -187,8 +187,8 @@ static struct variable const variable_list[] = {
 	{'d', (union number*)&dst_addr.u8[0], sizeof(dst_addr.u8[0]), "dst_addr.u8[0]", 0, 3},
 	{'D', (union number*)&dst_addr.u8[1], sizeof(dst_addr.u8[1]), "dst_addr.u8[1]", 0, 3},
 	{'m', (union number*)&rp_en, sizeof(rp_en), "reverse phase enabled", 0, 1},
-	{'e', (union number*)&escape, sizeof(escape), "serial escape", 0, 1},
-	{'a', (union number*)&alt, sizeof(alt), "serial alternative", 0, 1},
+	{'a', (union number*)&air, sizeof(air), "serial air", 0, 1},
+	{'H', (union number*)&hexin, sizeof(hexin), "serial hexin", 0, 1},
 	{'c', (union number*)&chunk_index, sizeof(chunk_index), "chunk_index", 0, NCHUNKS -1},
 	{'C', (union number*)&manual_crc, sizeof(manual_crc), "manual_crc", 0, 1},
 	{'x', (union number*)&tx_source, sizeof(tx_source), "tx_source", 0, MAX_TX_SOURCE - 1},
@@ -1258,6 +1258,8 @@ droplet_to_chunk(void)
 	print_hex_buf("0x", chunks[chunk_index].buf, chunk_size);
 }
 
+/* copy content of hex input buffer to current chunk buffer, 
+   then increment chunk index */
 static void
 hex_ibuf_to_chunk(void)
 {
@@ -1270,6 +1272,7 @@ hex_ibuf_to_chunk(void)
 		chunks[chunk_index].bufsize = hex_ibuf_len;
 		printf("chunk[%d]: ", chunk_index);
 		print_hex_buf("0x", chunks[chunk_index].buf, chunks[chunk_index].bufsize);
+		do_command("+c");
 	}
 }
 
@@ -1420,19 +1423,19 @@ PROCESS_THREAD(test_process, ev, data)
 		    et_run_handler();
 	    }
     } else if(ev == serial_line_event_message) {
-	    if (!escape && !alt) {
+	    if (!air && !hexin) {
 		    /* execute command */
 		    do_command((char *)data);
-	    } else if (escape) {
+	    } else if (air) {
 		    /* copy command to frame buf, as the payload of a glossy data packet */
 		    size_t slen = strlen((char *)data);
 		    memcpy(frame_buf, glossy_data_pkt_payload, 8);
 		    frame_buf[5] = slen;
 		    memcpy(&frame_buf[8], data, slen);
 		    frame_buf_len = 8 + slen;
-		    escape = 0;
-		    printf("serial escape=%u\n", escape);
-	    } else if (alt) {
+		    air = 0;
+		    printf("serial air=%u\n", air);
+	    } else if (hexin) {
 		    /* convert string as a hex sequence into buffer */
 		    if (hex_ibuf_ptr) {
 			    free(hex_ibuf_ptr);
@@ -1444,8 +1447,8 @@ PROCESS_THREAD(test_process, ev, data)
 		    if (hex_ibuf_len > 0) {
 			    print_hex_buf("", hex_ibuf_ptr, hex_ibuf_len);
 		    }
-		    alt = 0;
-		    printf("serial alternative=%u\n", alt);
+		    hexin = 0;
+		    printf("serial hexin=%u\n", hexin);
 	    }
     } else if(ev == sensors_event && data == &button_sensor) {
       start_mode((mode + 1) % NUM_MODES);
@@ -1478,7 +1481,7 @@ packet_input(void)
 	}
 
 	/* execute serial command received from air */
-	if (escape==1 && len < 3) {
+	if (air==1 && len < 3) {
 		*((uint8_t *)(packetbuf_dataptr() + len)) = '\0';
 		do_command(packetbuf_dataptr());
 	}
