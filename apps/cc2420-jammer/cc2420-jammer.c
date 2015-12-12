@@ -115,7 +115,7 @@ static uint8_t rp_en = 0;
 static uint8_t air = 0;
 static uint8_t hexin = 0;
 static uint8_t tx_source = TX_SOURCE_DROPLETS;
-static uint8_t manual_crc = 1;
+static uint8_t manual_crc = 0;
 static uint8_t prepend_phy_hdr = 1;
 static uint16_t max_attack_count = MAX_ATTACK_COUNT;
 
@@ -408,21 +408,22 @@ reset_transmitter(void)
 	setreg(CC2420_MDMCTRL0, reg);
 
 	/* reset FIFOP threshold to maximum */
-		reg = getreg(CC2420_IOCFG0);
-		setreg(CC2420_IOCFG0, SETFV(reg, 127, FIFOP_THR_MSB, FIFOP_THR_LSB));
+	reg = getreg(CC2420_IOCFG0);
+	setreg(CC2420_IOCFG0, SETFV(reg, 127, FIFOP_THR_MSB, FIFOP_THR_LSB));
 
-		/* Turn off autoack */
-		reg = getreg(CC2420_MDMCTRL0);
-		reg &= ~(AUTOACK | ADR_DECODE);
-		setreg(CC2420_MDMCTRL0, reg);
+	/* Turn off autoack */
+	reg = getreg(CC2420_MDMCTRL0);
+	reg &= ~(AUTOACK | ADR_DECODE);
+	setreg(CC2420_MDMCTRL0, reg);
 
-		/* Clear FIFOs */
-		strobe(CC2420_SFLUSHTX);
-		strobe(CC2420_SFLUSHRX);
+	/* Clear FIFOs */
+	strobe(CC2420_SFLUSHTX);
+	strobe(CC2420_SFLUSHRX);
 
   /* enter RX mode */
   /* strobe(CC2420_SRXON); */
-	strobe(CC2420_SRFOFF);
+	/* strobe(CC2420_SRFOFF); */
+	cc2420_on();
 }
 /*---------------------------------------------------------------------------*/
 /* Transmit a continuous carrier */
@@ -475,13 +476,15 @@ rx_mode(int new_mode)
 	CC2420_CLEAR_FIFOP_INT();
 	CC2420_ENABLE_FIFOP_INT();
 	flushrx();
-	strobe(CC2420_SRXON);
+	/* strobe(CC2420_SRXON); */
+	cc2420_on();
 }
 
 static void
 off_mode(int new_mode)
 {
-	strobe(CC2420_SRFOFF);
+	/* strobe(CC2420_SRFOFF); */
+	cc2420_off();
 }
 
 static void
@@ -515,6 +518,8 @@ mod_mode(int new_mode)
 	send_carrier(new_mode);
 }
 
+static void tx_eth(void);
+
 static void
 tx_mode(int new_mode)
 {
@@ -524,9 +529,11 @@ tx_mode(int new_mode)
 	/* Turn off automatic packet acknowledgment and address decoding. */
 	reg = getreg(CC2420_MDMCTRL0);
 	reg &= ~(AUTOACK | ADR_DECODE);
-	strobe(CC2420_SRXON);
-
-	etimer_set(&et, tx_interval);
+	setreg(CC2420_MDMCTRL0, reg);
+	/* strobe(CC2420_SRXON); */
+	cc2420_on();
+	/* etimer_set(&et, tx_interval); */
+	tx_eth();
 }
 
 static void
@@ -672,42 +679,72 @@ drizzle_mode(int new_mode)
 }
 
 /* Reactive jamming */
+/* static void */
+/* jam_mode(int new_mode) */
+/* { */
+/* 	unsigned reg; */
+/* 	jam_ena = 0; */
+/* 	CC2420_DISABLE_CCA_INT(); */
+/* 	CC2420_CLEAR_CCA_INT(); */
+/* 	// clear any jam data in TX */
+/* 	strobe(CC2420_SFLUSHTX); */
+/* 	/\* // clear buffer *\/ */
+/* 	/\* packetbuf_clear(); *\/ */
+/* 	/\* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt *\/ */
+/* 	/\* CC2420_CLEAR_FIFOP_INT(); *\/ */
+/* 	flushrx(); */
+/* #if ENABLE_CCA_INTERRUPT */
+/* 	/\* CC2420_CLEAR_CCA_INT(); *\/ */
+/* 	/\* CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt *\/ */
+/* #endif */
+/* 	jam_ena = 1; */
+
+/* 	/\* TEST: turn off AUTOCRC in order to send frame headers as normal packets *\/ */
+/* 	reg = getreg(CC2420_MDMCTRL0); */
+/* 	reg &= ~AUTOCRC; */
+/* 	setreg(CC2420_MDMCTRL0, reg); */
+
+/* 	/\* Raise FIFOP interrupt immediately after the length byte, i.e. the 1st byte into RXFIFO, is received *\/ */
+/* 	reg = getreg(CC2420_IOCFG0); */
+/* 	setreg(CC2420_IOCFG0, SETFV(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB)); */
+
+/* 	/\* Pre-fill TX FIFO for next jam *\/ */
+/* 	CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data)); */
+
+/* 	strobe(CC2420_SRXON); */
+
+/* 	PRINTF("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false"); */
+/* 	PRINTF("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false"); */
+/* } */
+
+/* Reactive attack mode */
 static void
-jam_mode(int new_mode)
+ack_mode(int new_mode)
 {
 	unsigned reg;
-	jam_ena = 0;
-	CC2420_DISABLE_CCA_INT();
-	CC2420_CLEAR_CCA_INT();
-	// clear any jam data in TX
-	strobe(CC2420_SFLUSHTX);
-	/* // clear buffer */
-	/* packetbuf_clear(); */
-	/* CC2420_DISABLE_FIFOP_INT(); // disable cc2420 "packet data received" interrupt */
-	/* CC2420_CLEAR_FIFOP_INT(); */
+	CC2420_CLEAR_FIFOP_INT();
+	CC2420_ENABLE_FIFOP_INT();
 	flushrx();
-#if ENABLE_CCA_INTERRUPT
-	/* CC2420_CLEAR_CCA_INT(); */
-	/* CC2420_ENABLE_CCA_INT(); // enable cc2420 "packet header detected" interrupt */
-#endif
-	jam_ena = 1;
-
-	/* TEST: turn off AUTOCRC in order to send frame headers as normal packets */
+	/* Turn off automatic packet acknowledgment and address decoding. */
 	reg = getreg(CC2420_MDMCTRL0);
-	reg &= ~AUTOCRC;
+	reg &= ~(AUTOACK | ADR_DECODE);
 	setreg(CC2420_MDMCTRL0, reg);
+	/* strobe(CC2420_SRXON); */
+	cc2420_on();
+}
 
-	/* Raise FIFOP interrupt immediately after the length byte, i.e. the 1st byte into RXFIFO, is received */
-	reg = getreg(CC2420_IOCFG0);
-	setreg(CC2420_IOCFG0, SETFV(reg, 1, FIFOP_THR_MSB, FIFOP_THR_LSB));
+static void
+ack_handler(void *packet, uint8_t len)
+{
+	/* printf("ACK pkt size = %u\n", len); */
+	seqno = 0;
+	tx_eth();
+}
 
-	/* Pre-fill TX FIFO for next jam */
-	CC2420_WRITE_FIFO_BUF(&jam_data, sizeof(jam_data));
-
-	strobe(CC2420_SRXON);
-
-	PRINTF("CCA interrupt enabled = %s\n", CC2420_CCA_PORT(IE) & BV(CC2420_CCA_PIN) ? "true":"false");
-	PRINTF("CCA inerrtupt on falling edge = %s\n", CC2420_CCA_PORT(IES) & BV(CC2420_CCA_PIN) ? "true":"false");
+static void
+ack_eth(void)
+{
+	tx_eth();
 }
 
 static void
@@ -718,7 +755,9 @@ tx_eth(void)
 	size_t buflen;
 
 	if(seqno < max_tx_packets) {
+		PROCESS_CONTEXT_BEGIN(&test_process);
 		etimer_set(&et, tx_interval / 2 + random_rand() % tx_interval);
+		PROCESS_CONTEXT_END(&test_process);
 
 		if (tx_source == TX_SOURCE_SEQNO) {
 		/* Send a seqno appended by random bytes*/
@@ -749,27 +788,32 @@ tx_eth(void)
 			print_hex_buf("RP buf: ", buf, buflen);
 		}
 		/* Optional: append payload with manual CRC instead of auto CRC */
-		if (manual_crc) {
-		uint16_t checksum = crc16_data(buf, buflen, 0);
-		/* printf("checksum = %4x\n", checksum); */
-		buf[buflen] = checksum & 0xFF;
-		buf[buflen+1] = checksum >> 8;
-		print_hex_buf("tx packet (with CRC): ", buf, buflen+2);
-		uint16_t reg = getreg(CC2420_MDMCTRL0);
-		reg &= ~AUTOCRC;
-		setreg(CC2420_MDMCTRL0, reg);
+ 		if (manual_crc) {
+			uint16_t checksum = crc16_data(buf, buflen, 0);
+			/* printf("checksum = %4x\n", checksum); */
+			buf[buflen] = checksum & 0xFF;
+			buf[buflen+1] = checksum >> 8;
+			print_hex_buf("tx packet (with CRC): ", buf, buflen+2);
+			uint16_t reg = getreg(CC2420_MDMCTRL0);
+			reg &= ~AUTOCRC;
+			setreg(CC2420_MDMCTRL0, reg);
 		}
 
+		/* Send packet */
 		// assuming cc2420_send() computes LEN with LEN = payload_len + 2
 		errno = cc2420_driver.send(buf, buflen);
-
-		/* Increment seqno */
 		if (errno == RADIO_TX_OK) printf(". ");
 		else printf("cc2420_send error: %d\n", errno);
+
+		/* Increment seqno */
 		++seqno;
 	} else {
+		/* Stop etimer and reset packet counter */
+		PROCESS_CONTEXT_BEGIN(&test_process);
 		etimer_stop(&et);
+		PROCESS_CONTEXT_END(&test_process);
 		printf("Finished sending %u packets\n", seqno);
+		seqno = 0;
 	}
 }
 
@@ -860,7 +904,6 @@ struct mode {
 
 const static struct mode mode_list[] = {
 	{RX, "RX", rx_mode, NULL, NULL, NULL},
-	{OFF, "OFF", off_mode, NULL, NULL, NULL},
 	{CH, "Channel sampling", cs_mode, NULL, cs_prolog, cs_eth},
 	{UNMOD, "Unmodulated carrier", unmod_mode, stop_rtimer, NULL, attack_eth},
 	{MOD, "Modulated carrier", mod_mode, stop_rtimer, NULL, attack_eth},
@@ -868,7 +911,9 @@ const static struct mode mode_list[] = {
 	{TX2, "TX unicast", tx2_mode, stop_rtimer, NULL, tx2_eth},
 	{DRIZZLE, "Drizzle", drizzle_mode, stop_rtimer, NULL, attack_eth},
 	{DROPLET, "Droplet", droplet_mode, stop_rtimer, NULL, attack_eth},
-	{JAM, "Reactive jamming", jam_mode, NULL, NULL, NULL},
+	/* {JAM, "Reactive jamming", jam_mode, NULL, NULL, NULL}, */
+	{ACK, "Reactive attack", ack_mode, NULL, NULL, ack_eth},
+	{OFF, "OFF", off_mode, NULL, NULL, NULL},
 	{-1, NULL, NULL, NULL, NULL, NULL}
 };
 
@@ -879,7 +924,7 @@ start_mode(int new_mode)
 	const struct mode *p;
 	for (p=&mode_list[0];p->handler;p++) {
 		if(p->mode == new_mode) {
-			printf("last mode index %d\n", last_mode_index);
+			/* PRINTF("last mode index %d\n", last_mode_index); */
 			if(mode_list[last_mode_index].prolog) {putchar('#'); mode_list[last_mode_index].prolog();}
 			if(p->prelog) p->prelog();
 			reset_transmitter();
@@ -978,6 +1023,18 @@ channel_down(void)
 	chn = (chn - 11 + 15) % 16 + 11;
 	cc2420_set_channel(chn);
 	printf("channel = %d\n", chn);
+}
+/*---------------------------------------------------------------------------*/
+static void
+mode_up(void)
+{
+	start_mode((mode + 1) % NUM_MODES);
+}
+/*---------------------------------------------------------------------------*/
+static void
+mode_down(void)
+{
+	start_mode((mode - 1) % NUM_MODES);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -1258,7 +1315,7 @@ droplet_to_chunk(void)
 	print_hex_buf("0x", chunks[chunk_index].buf, chunk_size);
 }
 
-/* copy content of hex input buffer to current chunk buffer, 
+/* copy content of hex input buffer to current chunk buffer,
    then increment chunk index */
 static void
 hex_ibuf_to_chunk(void)
@@ -1316,6 +1373,8 @@ static const struct command cmd_list[] =    {
  {'r', "RSSI", rssi},
  {'+', "Channel+", channel_up},
  {'-', "Channel-", channel_down},
+ {'n', "Next mode", mode_up},
+ {'p', "Previous mode", mode_down},
  {'v', "Successful pkt receptions", view_rx_statistics},
  {'V', "Unsuccessful pkt receptions", view_failed_rx_statistics},
  {'H', "Enter HSSD mode", debug_hssd},
@@ -1478,11 +1537,14 @@ packet_input(void)
 		max_rssi = (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) > max_rssi ? (int)packetbuf_attr(PACKETBUF_ATTR_RSSI) : max_rssi;
 		min_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) < min_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : min_lqi;
 		max_lqi = packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) > max_lqi ? packetbuf_attr(PACKETBUF_ATTR_LINK_QUALITY) : max_lqi;
-	}
 
-	/* execute serial command received from air */
-	if (air==1 && len < 3) {
-		*((uint8_t *)(packetbuf_dataptr() + len)) = '\0';
-		do_command(packetbuf_dataptr());
+		/* execute serial command received from air */
+		if (air==1 && len < 3) {
+			*((uint8_t *)(packetbuf_dataptr() + len)) = '\0';
+			do_command(packetbuf_dataptr());
+		} else if (mode == ACK) {
+			printf("ack mode on\n");
+			ack_handler(packetbuf_dataptr(), len);
+		}
 	}
 }
