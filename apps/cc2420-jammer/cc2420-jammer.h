@@ -28,7 +28,8 @@
 #define CH 5
 #define DRIZZLE 6
 #define TX2 7
-#define JAM 8
+/* #define JAM 8 */
+#define ACK 8
 #define OFF 9
 #define LAST_MODE OFF
 #define NUM_MODES (LAST_MODE+1)
