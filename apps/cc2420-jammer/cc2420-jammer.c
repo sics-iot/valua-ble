@@ -40,7 +40,7 @@
 #include "cc2420-jammer.h"
 #include "commands.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
 #else
@@ -303,12 +303,12 @@ static void
 reverse_phase(uint8_t *buf, size_t buflen)
 {
 	int i;
-	/* PRINTF("0x"); */
+	PRINTF("0x");
 	for(i = 0; i < buflen; i++) {
 		RP_BYTE(buf[i]);
-		/* PRINTF("%2X", buf[i]); */
+		PRINTF("%2X", buf[i]);
 	}
-	/* PRINTF("\n"); */
+	PRINTF("\n");
 }
 /*---------------------------------------------------------------------------*/
 unsigned
@@ -733,12 +733,53 @@ ack_mode(int new_mode)
 	cc2420_on();
 }
 
+/* ack decision function */
+static int
+ack_should_begin(uint8_t *frame, uint8_t len)
+{
+	/* look for glossy app header */
+	if (frame[0] == 0xA3 && len >= 10) {
+		uint16_t count = frame[8] + frame[9]*256;
+		if (count >= 10 && count <=14) {
+			printf("ack begin: count %u\n", count);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* ack decision function */
+static int
+ack_should_end(uint8_t *frame, uint8_t len)
+{
+	/* look for glossy app header */
+	if (frame[0] == 0xA3 && len >= 10) {
+		uint16_t count = frame[8] + frame[9]*256;
+		if (count >= 90 && count <=99) {
+			printf("ack end: count %u\n", count);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* ack mode packet handler */
 static void
-ack_handler(void *packet, uint8_t len)
+ack_handler(uint8_t *frame, uint8_t len)
 {
 	/* printf("ACK pkt size = %u\n", len); */
+	static int ack_begun;
 	seqno = 0;
-	tx_eth();
+	if (!ack_begun) {
+		if (ack_should_begin(frame, len)) {
+			ack_begun = 1;
+			tx_eth();
+		}
+	} else {
+		if (ack_should_end(frame, len)) {
+			ack_begun = 0;
+		}
+	}
 }
 
 static void
@@ -770,7 +811,7 @@ tx_eth(void)
 		} else if (tx_source == TX_SOURCE_DROPLETS) {
 			/* Test: send droplet packet, assumed packet format: preamble+SFD+LEN+Payload+CRC*/
 			// Debug print
-			print_hex_buf("Droplet header: ", droplets[droplet_index].data, droplets[droplet_index].size);
+			print_hex_buf("Droplet -> ", droplets[droplet_index].data, droplets[droplet_index].size);
 
 			buflen = droplets[droplet_index].size;
 			memcpy(buf, droplets[droplet_index].data, buflen);
@@ -924,7 +965,7 @@ start_mode(int new_mode)
 	const struct mode *p;
 	for (p=&mode_list[0];p->handler;p++) {
 		if(p->mode == new_mode) {
-			/* PRINTF("last mode index %d\n", last_mode_index); */
+			PRINTF("last mode index %d\n", last_mode_index);
 			if(mode_list[last_mode_index].prolog) {putchar('#'); mode_list[last_mode_index].prolog();}
 			if(p->prelog) p->prelog();
 			reset_transmitter();
@@ -1301,12 +1342,21 @@ assemble_packet_from_chunks(void)
 	print_hex_buf("0x", frame_buf, frame_buf_len);
 }
 
+/* Clear chunk content */
 static void
-droplet_to_chunk(void)
+clear_chunk(void)
 {
 	if (chunks[chunk_index].buf) {
 		free(chunks[chunk_index].buf);
+		chunks[chunk_index].bufsize = 0;
+		printf("chunk %d cleared!\n", chunk_index);
 	}
+}
+
+static void
+droplet_to_chunk(void)
+{
+	clear_chunk();
 	size_t chunk_size = droplets[droplet_index].size;
 	chunks[chunk_index].buf = malloc(chunk_size);
 	memcpy(chunks[chunk_index].buf, droplets[droplet_index].data, chunk_size);
@@ -1320,9 +1370,7 @@ droplet_to_chunk(void)
 static void
 hex_ibuf_to_chunk(void)
 {
-	if (chunks[chunk_index].buf) {
-		free(chunks[chunk_index].buf);
-	}
+	clear_chunk();
 	if (hex_ibuf_ptr && hex_ibuf_len > 0) {
 		chunks[chunk_index].buf = malloc(hex_ibuf_len);
 		memcpy(chunks[chunk_index].buf, hex_ibuf_ptr, hex_ibuf_len);
@@ -1392,6 +1440,7 @@ static const struct command cmd_list[] =    {
  {'o', "Copy droplet to chunk buffer", droplet_to_chunk},
  {'x', "Copy hex input buffer to chunk buffer", hex_ibuf_to_chunk},
  {'c', "Print chunks", print_chunks},
+ {'C', "Clear chunk", clear_chunk},
  {'D', "Print droplet", print_droplet},
  {'f', "Print frame buf", print_frame_buf},
  {'B', "Increment frame buf byte", increment_frame_buf_byte},
@@ -1543,7 +1592,7 @@ packet_input(void)
 			*((uint8_t *)(packetbuf_dataptr() + len)) = '\0';
 			do_command(packetbuf_dataptr());
 		} else if (mode == ACK) {
-			printf("ack mode on\n");
+			PRINTF("@");
 			ack_handler(packetbuf_dataptr(), len);
 		}
 	}
