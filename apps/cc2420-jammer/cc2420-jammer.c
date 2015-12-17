@@ -66,7 +66,7 @@
 
 #define TX_INTERVAL (CLOCK_SECOND / 1)
 #define ATTACK_GAP (CLOCK_SECOND * 1)
-#define MAX_TX_PACKETS 10
+#define MAX_TX_PACKETS 1
 #define PAYLOAD_LEN 20
 /* exprimental value used to occupy near full bandwidth, assuming RIMTER_SECOND = 4096 * N */
 /* "SFD gap" = 298 us out of 4395 us Droplet interval => actual free air time = 298 - 160 (preamble+SFD) = 138 us => free bandwidth = 138/4395 = 3.1% */
@@ -108,7 +108,7 @@ static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
 static clock_time_t attack_gap = ATTACK_GAP;
-static clock_time_t carrier_duration = (MAX_TX_PACKETS * TX_INTERVAL);
+static clock_time_t carrier_duration = CLOCK_SECOND * 2;
 static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
@@ -117,8 +117,8 @@ static uint8_t rp_en = 0;
 static uint8_t air = 0;
 static uint8_t hexin = 0;
 static uint8_t tx_source = TX_SOURCE_DROPLETS;
-static uint8_t manual_crc = 0; // switch on if selected droplet is a whole PMDU
-static uint8_t prepend_phy_hdr = 0; // switch on if selected  droplet is a whole PMDU
+static uint8_t manual_crc = 1; // switch on if selected droplet is a whole PMDU
+static uint8_t prepend_phy_hdr = 1; // switch on if selected  droplet is a whole PMDU
 static uint16_t max_attack_count = MAX_ATTACK_COUNT;
 
 static struct etimer et, et_run;
@@ -175,7 +175,7 @@ const static struct hex_seq droplets[] =	{
 	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
-static int droplet_index = 0;
+static int droplet_index = 4;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
@@ -758,24 +758,26 @@ ack_should_begin(uint8_t *frame, uint8_t len, unsigned long ack_time)
 }
 
 /* ack mode packet handler */
+static clock_time_t delta_duration;
+
 static void
 ack_handler(uint8_t *frame, uint8_t len)
 {
-#define NRUNS 8
-#define ACK_STEP 2
+#define NRUNS 8 //reset duration every n runs
 	static unsigned ack_run = 0;
 	static unsigned long ack_began_at = 0;
-	seqno = 0;
 
+	seqno = 0;
 
 	if (ack_should_begin(frame, len, ack_began_at)) {
 		/* skip attack every N runs */
 		if (ack_run % NRUNS == 0) {
+			delta_duration = carrier_duration;
 			ack_run++;
 			return;
 		}
-		// ramp up attack duraiton in N-second steps each run
-		carrier_duration = (ack_run % NRUNS) * ACK_STEP * CLOCK_SECOND;
+		// ramp up attack duraiton in by one step each run
+		carrier_duration = delta_duration * (ack_run % NRUNS);
 		drizzle_mode(DRIZZLE);
 		ack_began_at = clock_seconds();
 		printf("ack run %u begins at time %lu, to last %lu s\n", 
@@ -786,8 +788,9 @@ ack_handler(uint8_t *frame, uint8_t len)
 static void
 ack_eth(void)
 {
-	/* tx_eth(); */
 	attack_eth();
+	// restore carrier_duration
+	carrier_duration = delta_duration;
 	// restore RX mode
 	cc2420_on();
 }
