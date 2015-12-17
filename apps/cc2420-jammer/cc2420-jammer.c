@@ -426,6 +426,7 @@ reset_transmitter(void)
   /* enter RX mode */
 	/* cc2420_on(); */
 	cc2420_off();
+	strobe(CC2420_SRFOFF);
 }
 /*---------------------------------------------------------------------------*/
 /* Transmit a continuous carrier */
@@ -487,6 +488,7 @@ off_mode(int new_mode)
 {
 	/* strobe(CC2420_SRFOFF); */
 	cc2420_off();
+	strobe(CC2420_SRFOFF);
 }
 
 static void
