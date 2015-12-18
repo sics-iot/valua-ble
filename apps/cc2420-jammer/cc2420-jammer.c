@@ -175,7 +175,7 @@ const static struct hex_seq droplets[] =	{
 	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
-static int droplet_index = 4;
+static int droplet_index = 3;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
@@ -741,10 +741,10 @@ ack_mode(int new_mode)
 
 /* ack decision function */
 static int
-ack_should_begin(uint8_t *frame, uint8_t len, unsigned long ack_time)
+ack_should_begin(uint8_t *frame, uint8_t len, unsigned long ack_begun_at)
 {
-	/* check minimal ack interval */
-	if (clock_seconds() - ack_time > 15) {
+	/* check minimal ack interval in seconds */
+	if (clock_seconds() - ack_begun_at > 25) {
 		/* look for glossy app header */
 		if (frame[0] == 0xA3 && len >= 10) {
 			uint16_t count = frame[8] + frame[9]*256;
@@ -770,16 +770,17 @@ ack_handler(uint8_t *frame, uint8_t len)
 	seqno = 0;
 
 	if (ack_should_begin(frame, len, ack_began_at)) {
+		ack_began_at = clock_seconds();
 		/* skip attack every N runs */
 		if (ack_run % NRUNS == 0) {
+			printf("ack run %u skipped at time %lu\n", 
+			       ack_run++, ack_began_at);
 			delta_duration = carrier_duration;
-			ack_run++;
 			return;
 		}
-		// ramp up attack duraiton in by one step each run
+		/* ramp up attack duraiton in by one step each run */
 		carrier_duration = delta_duration * (ack_run % NRUNS);
 		drizzle_mode(DRIZZLE);
-		ack_began_at = clock_seconds();
 		printf("ack run %u begins at time %lu, to last %lu s\n", 
 		       ack_run++, ack_began_at, carrier_duration/CLOCK_SECOND);
 	}
