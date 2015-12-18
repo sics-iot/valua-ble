@@ -666,12 +666,12 @@ drizzle_mode(int new_mode)
 	}
 
 	/* Fill Tx FIFO with replicates of content in buf */
+	strobe(CC2420_SFLUSHTX);
 	pad(txfifo_data, sizeof(txfifo_data), buf, buflen, NULL);
-
 	// Debug print
 	print_hex_buf("TXFIFO: ", txfifo_data, sizeof(txfifo_data));
-
 	CC2420_WRITE_FIFO_BUF(txfifo_data, 128);
+
  start_attack:
 	PROCESS_CONTEXT_BEGIN(&test_process);
 	etimer_set(&et, carrier_duration);
@@ -725,9 +725,12 @@ drizzle_mode(int new_mode)
 /* } */
 
 /* Reactive attack mode */
+static unsigned ack_run = 0;
+
 static void
 ack_mode(int new_mode)
 {
+	ack_run = 0;
 	unsigned reg;
 	CC2420_CLEAR_FIFOP_INT();
 	CC2420_ENABLE_FIFOP_INT();
@@ -764,7 +767,6 @@ static void
 ack_handler(uint8_t *frame, uint8_t len)
 {
 #define NRUNS 8 //reset duration every n runs
-	static unsigned ack_run = 0;
 	static unsigned long ack_began_at = 0;
 
 	seqno = 0;
