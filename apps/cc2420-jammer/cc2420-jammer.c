@@ -108,7 +108,7 @@ static int mode;
 
 static clock_time_t tx_interval = TX_INTERVAL;
 static clock_time_t attack_gap = ATTACK_GAP;
-static clock_time_t carrier_duration = CLOCK_SECOND * 2;
+static clock_time_t carrier_duration = (CLOCK_SECOND * 2);
 static unsigned max_tx_packets = MAX_TX_PACKETS;
 static unsigned payload_len = PAYLOAD_LEN;
 static rtimer_clock_t rtimer_interval = RTIMER_INTERVAL;
@@ -175,7 +175,7 @@ const static struct hex_seq droplets[] =	{
 	{glossy_sync_pkt_reversed, sizeof(glossy_sync_pkt_reversed)},
 };
 
-static int droplet_index = 3;
+static int droplet_index = 4;
 static uint8_t txfifo_data[128];
 static linkaddr_t dst_addr = { {DST_ADDR0, DST_ADDR1} };
 
@@ -747,7 +747,7 @@ static int
 ack_should_begin(uint8_t *frame, uint8_t len, unsigned long ack_begun_at)
 {
 	/* check minimal ack interval in seconds */
-	if (clock_seconds() - ack_begun_at > 25) {
+	if (clock_seconds() - ack_begun_at > 15) {
 		/* look for glossy app header */
 		if (frame[0] == 0xA3 && len >= 10) {
 			uint16_t count = frame[8] + frame[9]*256;
@@ -1209,18 +1209,29 @@ alter_syncword(void)
 	printf("Syncword: 0x%X\n", reg);
 }
 /*---------------------------------------------------------------------------*/
-/* Change my MAC address, can be used to alter ACK behaviour */
+/* Increment my MAC address, can be used to alter ACK behaviour */
 static void
-mac_update(void)
+mac_up(void)
 {
 	unsigned shortaddr;
 	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	// increment higher byte and clear lower byte, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
-	shortaddr = ((shortaddr+0x0100) % 0x4000) & 0xFF00;
+	shortaddr = ((shortaddr+0x0100) % 0x3000) & 0xFF00;
 	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
 	printf("16-bit MAC address: 0x%04X\n", shortaddr);
 }
 
+/* Decrement my MAC address, can be used to alter ACK behaviour */
+static void
+mac_down(void)
+{
+	unsigned shortaddr;
+	CC2420_READ_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	// increment higher byte and clear lower byte, must correspond to linkaddr_node_addr.u8[0] if Rime stack used
+	shortaddr = ((shortaddr-0x0100) % 0x3000) & 0xFF00;
+	CC2420_WRITE_RAM(&shortaddr,CC2420RAM_SHORTADDR, 2);
+	printf("16-bit MAC address: 0x%04X\n", shortaddr);
+}
 /*---------------------------------------------------------------------------*/
 /* Store 16 MAC address as permanent node ID in XMEM */
 static void
@@ -1442,7 +1453,8 @@ static const struct command cmd_list[] =    {
  {'H', "Enter HSSD mode", debug_hssd},
  {'A', "Enable analog test mode", debug_analog},
  {'S', "Alter sync word", alter_syncword},
- {'M', "MAC address update", mac_update},
+ {'M', "MAC address up", mac_up},
+ {'m', "MAC address down", mac_down},
  {'L', "Show all registers", show_all_registers},
  /* {'s', "CC2420 status byte", status}, */
  {'b', "Battery level", battery_level},
