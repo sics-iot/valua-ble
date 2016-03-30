@@ -62,6 +62,7 @@
 SENSORS(&button_sensor);
 
 static uint16_t node_id = 0x0102;
+unsigned long et_process_polled;
 
 /*---------------------------------------------------------------------------*/
 int contiki_argc = 0;
@@ -173,6 +174,7 @@ main(int argc, char **argv)
 
 		/* asm ("halt"); */
     etimer_request_poll();
+    et_process_polled++;
 		/* uart2_putchar('.'); */
   }
 }
