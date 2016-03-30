@@ -41,6 +41,8 @@
 #include "platform-conf.h"
 
 #include <stdio.h> /* For printf() */
+
+extern unsigned long et_process_polled;
 /*---------------------------------------------------------------------------*/
 PROCESS(blink_process, "blink process");
 AUTOSTART_PROCESSES(&blink_process);
@@ -75,7 +77,9 @@ PROCESS_THREAD(blink_process, ev, data)
 		etimer_set(&et, CLOCK_SECOND / 4);
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		LED1 = 1;
-		iprintf("tick %d\n", n++);
+		/* iprintf("tick %d\n", n++); */
+		iprintf("tick %d uptime %lu clock_time %lu et_process_polled %lu\n",
+		        n++, clock_seconds(), clock_time(), et_process_polled);
 		etimer_set(&et, CLOCK_SECOND / 4 * 5);
 	}
 	  
